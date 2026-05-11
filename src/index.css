@@ -1,0 +1,341 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,400..700;1,400..700&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-serif: "Times New Roman", "Georgia", serif;
+  --font-arabic: "Amiri", serif;
+  --font-business: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  /* Sophisticated Metallic Gold Palette (Global Defaults / Dark) */
+  --color-gold-start: #E6C682;
+  --color-gold-mid: #D4AF37;
+  --color-gold-end: #8C6A24;
+  --color-bg-deep: #0D0F12;
+  --color-bg-soft: #16191D;
+  --color-bg-sidebar: #090B0D;
+  --color-text-main: #E6C682;
+  --color-text-muted: #949BA6;
+  --color-border-subtle: #23272E;
+  --color-primary-action: #D4AF37;
+
+  /* Constrained Width for Professionals */
+  --max-content-width: 95%;
+  --max-message-width: 90%;
+
+  /* Lite Mode Palette (Professional & Sovereign) */
+  --color-lite-sidebar: #F8FAFC;
+  --color-lite-accent: #0A1B3D; /* Deep Sovereign Blue */
+  --color-lite-bg: #ffffff;
+  --color-lite-text: #0A1B3D;
+  --color-lite-text-muted: #3D5A80;
+  --color-lite-border: #E2E8F0;
+
+  /* Font Scaling & Dynamic Colors */
+  --font-scale: 1;
+  --dynamic-chat-text: var(--color-text-main);
+
+  /* Custom Utilities as Theme Variables */
+  --background-image-gold-gradient: linear-gradient(135deg, var(--color-gold-start) 0%, var(--color-gold-mid) 45%, var(--color-gold-end) 100%);
+  --background-image-lite-sidebar: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);
+}
+
+@layer base {
+  html {
+    font-size: calc(18px * var(--font-scale));
+    transition: font-size 0.3s ease;
+    scroll-behavior: smooth;
+  }
+
+  html.light {
+    font-size: calc(18px * var(--font-scale));
+  }
+
+  body {
+    @apply bg-bg-deep text-text-main font-business min-h-screen overflow-hidden antialiased selection:bg-gold-start/20 transition-colors duration-700;
+  }
+
+  body.light {
+    @apply bg-lite-bg text-lite-text font-business;
+    --color-bg-deep: var(--color-lite-bg);
+    --color-bg-soft: #f1f5f9;
+    --color-bg-sidebar: #ffffff;
+    --color-text-main: var(--color-lite-text);
+    --color-text-muted: #2D3E50;
+    --color-border-subtle: var(--color-lite-border);
+    --color-primary-action: var(--color-lite-accent);
+    --color-gold-start: var(--color-lite-accent); 
+    --color-gold-mid: var(--color-lite-accent);
+    --color-gold-end: #0A192F;
+    --dynamic-chat-text: var(--color-lite-text);
+  }
+}
+
+@layer components {
+  /* Theme-dependent Radius */
+  .theme-radius {
+    @apply rounded-3xl transition-all duration-300;
+  }
+
+  body.light .theme-radius {
+    @apply rounded-[8px];
+  }
+
+  /* 3D Metallic Gold Gradient (Manual class for complex background-size) */
+  .bg-gold-gradient {
+    @apply bg-gold-gradient; /* Apply the theme variable utility */
+    background-size: 200% 200%;
+  }
+
+  body.light .bg-gold-gradient {
+    @apply bg-none bg-lite-accent;
+  }
+
+  .text-gold-gradient {
+    @apply bg-gold-gradient bg-clip-text text-transparent;
+    background-size: 200% 200%;
+  }
+
+  body.light .text-gold-gradient {
+    @apply bg-none text-lite-accent;
+  }
+
+  /* 3D Effect Utilities */
+  .logo-3d {
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4)) drop-shadow(0 0 10px rgba(212, 175, 55, 0.2));
+    transform: perspective(500px) rotateX(10deg);
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  body.light .logo-3d {
+    filter: none;
+    transform: none;
+    box-shadow: 0 10px 25px -5px rgba(27, 54, 93, 0.2);
+  }
+
+  body:not(.light) .logo-3d {
+    filter: drop-shadow(0 2px 4px rgba(212, 175, 55, 0.3));
+  }
+
+  .logo-3d:hover {
+    filter: drop-shadow(0 8px 12px rgba(0,0,0,0.5)) drop-shadow(0 0 15px rgba(230, 198, 130, 0.4));
+    transform: perspective(500px) rotateX(0deg) scale(1.05);
+  }
+
+  .smooth-tab {
+    @apply transition-all duration-500 ease-in-out relative overflow-hidden;
+  }
+
+  .smooth-tab::after {
+    content: '';
+    @apply absolute inset-0 bg-gold-gradient opacity-0 transition-opacity duration-500;
+  }
+
+  .smooth-tab.active::after {
+    @apply opacity-5;
+  }
+
+  .caps {
+    @apply uppercase tracking-[0.2em] text-[9px] font-bold opacity-60;
+  }
+
+  /* Clearer Content Blocks */
+  .law-article {
+    @apply border-l border-gold-start/30 pl-6 mb-8 relative leading-relaxed;
+  }
+
+  [dir="rtl"] .law-article {
+    @apply border-l-0 border-r border-gold-start/30 pr-6 pl-0;
+  }
+
+  .legal-card {
+    @apply bg-bg-sidebar/40 border border-border-subtle/60 backdrop-blur-md p-8 transition-all hover:border-gold-start/20;
+    @apply rounded-3xl;
+  }
+}
+
+.markdown-body {
+  @apply prose max-w-none prose-p:leading-loose prose-headings:tracking-tight;
+  --tw-prose-body: var(--color-text-main);
+  --tw-prose-headings: var(--color-text-main);
+  --tw-prose-links: var(--color-primary-action);
+  --tw-prose-bold: var(--color-primary-action);
+  --tw-prose-bullets: var(--color-primary-action);
+  --tw-prose-hr: var(--color-border-subtle);
+  font-size: 1rem;
+}
+
+body:not(.light) .markdown-body {
+  @apply prose-invert prose-headings:font-serif prose-headings:font-medium;
+}
+
+body.light .markdown-body {
+  @apply prose-slate prose-headings:font-business prose-headings:font-bold;
+  --tw-prose-body: var(--color-lite-text);
+  --tw-prose-headings: var(--color-lite-text);
+  --tw-prose-links: var(--color-lite-accent);
+  --tw-prose-bold: var(--color-lite-text);
+  --tw-prose-bullets: var(--color-lite-accent);
+  --tw-prose-hr: var(--color-lite-border);
+}
+
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+  @apply border-b border-border-subtle/50 pb-4 mb-6 mt-10;
+}
+
+[dir="rtl"] .markdown-body {
+  direction: rtl;
+  text-align: right;
+  font-size: 1.1rem; /* Arabic looks better slightly larger */
+}
+
+/* Professional Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-border-subtle rounded-full border-2 border-transparent bg-clip-padding transition-all;
+}
+
+body.light ::-webkit-scrollbar-thumb {
+  @apply bg-lite-accent/20;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gold-start;
+}
+
+body.light ::-webkit-scrollbar-thumb:hover {
+  @apply bg-lite-accent/40;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-gold-start/20 rounded-full hover:bg-gold-start/40 transition-colors;
+}
+
+body.light .custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-lite-accent/10 hover:bg-lite-accent/20;
+}
+
+/* specialized visible scrollbar for chat area */
+.scrollbar-prominent::-webkit-scrollbar {
+  width: 6px;
+}
+
+@media (min-width: 1024px) {
+  .scrollbar-prominent::-webkit-scrollbar {
+    width: 10px;
+  }
+}
+
+.scrollbar-prominent::-webkit-scrollbar-track {
+  @apply bg-bg-deep/30;
+}
+
+.scrollbar-prominent::-webkit-scrollbar-thumb {
+  @apply bg-gold-start/40 border-2 border-transparent bg-clip-padding;
+}
+
+.scrollbar-prominent::-webkit-scrollbar-thumb:hover {
+  @apply bg-gold-start/70;
+}
+
+body.light .scrollbar-prominent::-webkit-scrollbar-thumb {
+  @apply bg-lite-accent/20;
+}
+
+body.light .scrollbar-prominent::-webkit-scrollbar-thumb:hover {
+  @apply bg-lite-accent/40;
+}
+
+/* No Scrollbar Utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.analytical-gradient::before {
+  content: '';
+  @apply absolute inset-0 pointer-events-none;
+  background: radial-gradient(circle at top right, var(--color-gold-start) 0%, transparent 25%),
+              radial-gradient(circle at bottom left, var(--color-gold-start) 0%, transparent 25%);
+  opacity: 0.08;
+  z-index: 0;
+}
+
+@keyframes loader {
+  0% { transform: translateX(-100%); opacity: 0; }
+  50% { transform: translateX(0%); opacity: 0.8; }
+  100% { transform: translateX(100%); opacity: 0; }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body, html { 
+    height: auto !important; 
+    overflow: visible !important; 
+    background: white !important; 
+    color: black !important;
+    font-family: "Times New Roman", Times, serif !important;
+  }
+  main, .flex-1 { 
+    overflow: visible !important; 
+    height: auto !important; 
+    display: block !important; 
+    position: static !important;
+  }
+  .overflow-y-auto { 
+    overflow: visible !important; 
+    height: auto !important; 
+    max-height: none !important;
+  }
+  .markdown-body { 
+    color: black !important; 
+    background: white !important;
+    --tw-prose-body: black; 
+    --tw-prose-headings: black; 
+    font-size: 12pt !important;
+  }
+  .bg-bg-soft, .bg-bg-sidebar, .bg-bg-deep { 
+    background: white !important; 
+  }
+  .border, .border-border-subtle { 
+    border-color: #eee !important; 
+  }
+  .p-7, .p-8, .p-10 {
+    padding: 0 !important;
+    margin-bottom: 20px !important;
+  }
+  .logo-3d, .shadow-lg, .shadow-xl {
+    filter: none !important;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  /* Ensure page breaks are handled gracefully */
+  .markdown-body h1, .markdown-body h2 {
+    page-break-after: avoid;
+  }
+  p, blockquote {
+    page-break-inside: avoid;
+  }
+}

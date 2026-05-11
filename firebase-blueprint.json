@@ -1,0 +1,73 @@
+{
+  "entities": {
+    "LoginLog": {
+      "title": "Login Log",
+      "description": "Captured details of user login events.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "Email of the user who logged in." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the login occurred." },
+        "userAgent": { "type": "string", "description": "Browser details of the user." },
+        "uid": { "type": "string", "description": "Firebase Auth UID." }
+      },
+      "required": ["email", "timestamp", "uid"]
+    },
+    "Admin": {
+      "title": "Administrator",
+      "description": "Lists emails of users allowed to access administrative panels.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "Email of the admin." }
+      },
+      "required": ["email"]
+    },
+    "LibraryItem": {
+      "title": "Library Item",
+      "description": "Information about a legal document in the library.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Title of the document." },
+        "content": { "type": "string", "description": "Text content or description of the URL." },
+        "type": { "type": "string", "enum": ["law", "regulation", "decree", "update", "url", "recommendation", "convention", "ministerial_decree"], "description": "Classification of the document." },
+        "uploadedBy": { "type": "string", "description": "Email of the expert who uploaded it." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Internal server timestamp." },
+        "relatedTo": { "type": "array", "items": { "type": "string" }, "description": "IDs of related laws or updates." },
+        "fileName": { "type": "string", "description": "Optional original filename." },
+        "url": { "type": "string", "description": "External reference link." },
+        "isPublic": { "type": "boolean", "description": "Whether the item is visible to all users." }
+      },
+      "required": ["title", "content", "type", "uploadedBy", "isPublic"]
+    },
+    "DepositionLog": {
+      "title": "Deposition Log",
+      "description": "History of structural changes or operations in the library.",
+      "type": "object",
+      "properties": {
+        "operation": { "type": "string", "enum": ["create", "update", "delete", "detect"], "description": "Type of action performed." },
+        "itemId": { "type": "string", "description": "Reference to the affected library item." },
+        "email": { "type": "string", "description": "Who performed the action." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When it happened." },
+        "details": { "type": "object", "description": "Contextual details of the change." }
+      },
+      "required": ["operation", "email", "timestamp"]
+    }
+  },
+  "firestore": {
+    "login_logs/{logId}": {
+      "schema": "LoginLog",
+      "description": "Collection of all system login events."
+    },
+    "admins/{adminId}": {
+      "schema": "Admin",
+      "description": "List of authorized administrators."
+    },
+    "library/{itemId}": {
+      "schema": "LibraryItem",
+      "description": "The central legal depository for laws and decrees."
+    },
+    "library_logs/{logId}": {
+      "schema": "DepositionLog",
+      "description": "Audit trail for all library modifications."
+    }
+  }
+}

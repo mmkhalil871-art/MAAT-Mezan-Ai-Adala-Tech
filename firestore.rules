@@ -1,0 +1,133 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 0.1 Reusable Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      // Hardcoded admin email from runtime environment
+      return isSignedIn() && (
+        request.auth.token.email == 'm.mkhalil871@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+
+    function isValidLoginLog(data) {
+      return data.keys().hasAll(['email', 'timestamp', 'userAgent', 'uid']) &&
+             data.keys().size() >= 4 && data.keys().size() <= 8 &&
+             data.email is string && data.email.size() <= 256 &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.userAgent is string && data.userAgent.size() <= 1024 &&
+             data.timestamp == request.time;
+    }
+
+    function isValidLibraryItem(data) {
+      return data.keys().hasAll(['title', 'content', 'type', 'uploadedBy', 'timestamp', 'isPublic']) &&
+             // Optional fields: fileName, url, relatedTo
+             data.keys().size() >= 6 && data.keys().size() <= 9 &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 500 &&
+             data.content is string && data.content.size() > 0 && data.content.size() <= 1000000 &&
+             data.type in ['law', 'regulation', 'decree', 'update', 'url', 'recommendation', 'convention', 'ministerial_decree'] &&
+             data.uploadedBy is string && data.uploadedBy.size() <= 256 &&
+             data.timestamp == request.time &&
+             data.isPublic is bool &&
+             (!('fileName' in data) || (data.fileName is string && data.fileName.size() <= 500)) &&
+             (!('url' in data) || (data.url is string && data.url.size() <= 2083)) &&
+             (!('relatedTo' in data) || (data.relatedTo is list && data.relatedTo.size() <= 50));
+    }
+
+    function isValidDepositionLog(data) {
+      return data.keys().hasAll(['operation', 'email', 'timestamp', 'details']) &&
+             // Optional path: itemId
+             data.keys().size() >= 4 && data.keys().size() <= 5 &&
+             data.operation in ['create', 'update', 'delete', 'detect'] &&
+             data.email is string && data.email.size() <= 256 &&
+             data.timestamp == request.time &&
+             data.details is map &&
+             (!('itemId' in data) || (data.itemId is string && data.itemId.size() <= 128));
+    }
+
+    // --- Collection Routes ---
+
+    // Login Logs
+    match /login_logs/{logId} {
+      allow create: if isSignedIn() && 
+        isValidId(logId) &&
+        isValidLoginLog(incoming()) &&
+        incoming().email == request.auth.token.email &&
+        incoming().uid == request.auth.uid;
+      
+      allow list: if isAdmin() && resource.data.email != null; 
+      allow get: if isAdmin() && isValidId(logId);
+    }
+
+    // Admins list
+    match /admins/{adminId} {
+      allow read: if isSignedIn() && isValidId(adminId);
+      allow write: if false; 
+    }
+
+    // Legal Library
+    match /library/{itemId} {
+      // Secure List Query: Enforce visibility
+      allow list: if isAdmin() || resource.data.isPublic == true || (isSignedIn() && resource.data.uploadedBy == request.auth.token.email);
+      
+      allow get: if isValidId(itemId) && (isAdmin() || resource.data.isPublic == true || (isSignedIn() && resource.data.uploadedBy == request.auth.token.email));
+      
+      allow create: if (isEmailVerified() || isAdmin()) &&
+        isValidId(itemId) &&
+        isValidLibraryItem(incoming()) &&
+        (isAdmin() || incoming().uploadedBy == request.auth.token.email);
+      
+      allow update: if (isEmailVerified() || isAdmin()) &&
+        isValidId(itemId) &&
+        isValidLibraryItem(incoming()) && (
+          // Admin can update anything
+          isAdmin() || (
+            // Owner can update specific fields, but cannot change identity or immutables
+            incoming().uploadedBy == existing().uploadedBy && 
+            incoming().timestamp == existing().timestamp &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'type', 'fileName', 'url', 'relatedTo', 'isPublic'])
+          )
+        );
+      
+      allow delete: if isValidId(itemId) && (isAdmin() || (isEmailVerified() && resource.data.uploadedBy == request.auth.token.email));
+    }
+
+    // Deposition Logs
+    match /library_logs/{logId} {
+      allow create: if (isEmailVerified() || isAdmin()) && isValidId(logId) && isValidDepositionLog(incoming());
+      
+      allow list: if isAdmin() || (isSignedIn() && resource.data.email == request.auth.token.email);
+      allow get: if isValidId(logId) && (isAdmin() || (isSignedIn() && resource.data.email == request.auth.token.email));
+      
+      allow update: if false; 
+      allow delete: if isValidId(logId) && isAdmin();
+    }
+  }
+}
