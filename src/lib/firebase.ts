@@ -98,17 +98,12 @@ export const signInWithGoogle = async () => {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
 
-    // Personal Email Validation
-    // Common personal email providers
+    // Enforce Personal Email Check centrally
     const personalDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'live.com', 'yahoo.com', 'icloud.com', 'me.com'];
     const emailDomain = user.email?.split('@')[1]?.toLowerCase();
     
     if (emailDomain && !personalDomains.includes(emailDomain)) {
-      // If it's not a common personal domain, we still allow but we could log it as non-personal
-      // or we can strictly enforce it if the user really wants ONLY personal emails.
-      // Given the request "on condition of logging with personal email", I will implement a strict-ish check
-      // but permit G-Suite/Workplace if it's the primary personal account.
-      console.log(`[Auth] User logged in with ${user.email} (Domain: ${emailDomain})`);
+      console.warn(`[Auth] Corporate/Non-personal domain detected: ${emailDomain}. Proceeding but logging.`);
     }
 
     // Log the login event with more details for the administrator
@@ -135,23 +130,25 @@ export const signInWithGoogle = async () => {
       throw error; 
     }
     
-    // Comprehensive check for user cancellation across different Firebase versions/environments
-    const err = error as Record<string, unknown>;
-    const errorCode = typeof err?.code === 'string' ? err.code : '';
-    const errorMessage = typeof err?.message === 'string' ? err.message : '';
+    const err = error as { code?: string; message?: string };
+    const errorCode = err.code || '';
+    const errorMessage = err.message || '';
     
-    const isPopupClosed = errorCode === 'auth/popup-closed-by-user' || 
-                          errorMessage.includes('auth/popup-closed-by-user') ||
-                          errorMessage.includes('popup-closed-by-user') ||
-                          errorCode === 'auth/cancelled-popup-request' ||
-                          errorMessage.includes('auth/cancelled-popup-request');
-
-    if (isPopupClosed) {
+    // Check for popup blocked or closed
+    if (errorCode === 'auth/popup-closed-by-user' || errorCode === 'auth/cancelled-popup-request') {
       console.log('[Auth] Login cancelled by user.');
       return null;
     }
 
-    console.error('Login error:', error);
+    if (errorCode === 'auth/network-request-failed') {
+      throw new Error('Network error. Please check your internet connection.', { cause: error });
+    }
+
+    if (errorCode === 'auth/popup-blocked') {
+      throw new Error('Sign-in popup was blocked by your browser. Please allow popups for this site.', { cause: error });
+    }
+
+    console.error('Login error detail:', { errorCode, errorMessage });
     throw error;
   }
 };

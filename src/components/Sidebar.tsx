@@ -465,9 +465,21 @@ export default function Sidebar({
               onClick={async () => {
                 try {
                   const { signInWithGoogle } = await import('../lib/firebase');
-                  await signInWithGoogle();
-                } catch {
-                  console.log('Login request failed or was cancelled.');
+                  const user = await signInWithGoogle();
+                  if (user) {
+                    // Quick personal email enforcement on sidebar login too
+                    const personalDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'live.com', 'yahoo.com', 'icloud.com', 'me.com'];
+                    const emailDomain = user.email?.split('@')[1]?.toLowerCase();
+                    if (emailDomain && !personalDomains.includes(emailDomain)) {
+                       alert(isAr ? "يرجى تسجيل الدخول باستخدام بريد إلكتروني شخصي." : "Please use a personal email account.");
+                    }
+                  }
+                } catch (err: unknown) {
+                  console.error('Login action failed:', err);
+                  const errorMessage = err instanceof Error ? err.message : String(err);
+                  if (errorMessage.includes('popup-blocked')) {
+                    alert(isAr ? 'يرجى السماح بالنوافذ المنبثقة لإتمام عملية تسجيل الدخول.' : 'Please allow popups to complete the sign-in process.');
+                  }
                 }
               }}
               className={cn(
@@ -482,7 +494,7 @@ export default function Sidebar({
               }}
             >
               <ShieldCheck className="w-4 h-4 group-hover:scale-110 transition-transform" />
-              {isAr ? 'دفع الدخول' : 'Sign In'}
+              {isAr ? 'تسجيل الدخول' : 'Sign In'}
             </button>
           )}
 

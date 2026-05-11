@@ -28,25 +28,28 @@ export default function LoginPage({ onLogin, onGuestAccess, isAr, theme, onTheme
     try {
       const user = await signInWithGoogle();
       if (user) {
-        // Enforce personal email if strictly requested
+        // Strict enforcement of personal email domain (if desired)
         const personalDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'live.com', 'yahoo.com', 'icloud.com', 'me.com'];
         const emailDomain = user.email?.split('@')[1]?.toLowerCase();
         
         if (emailDomain && !personalDomains.includes(emailDomain)) {
-          // If the user strictly meant "personal email only" vs corporate
-          // we can block it here, or just let them through but with a warning.
-          // I will enforce it to match the prompt's "condition".
           setError(isAr 
-            ? "يرجى تسجيل الدخول باستخدام بريد إلكتروني شخصي (مثل Gmail أو Outlook)." 
-            : "Please sign in using a personal email (e.g., Gmail or Outlook).");
+            ? "يرجى تسجيل الدخول باستخدام بريد إلكتروني شخصي (مثل gmail.com)." 
+            : "Please use a personal email (like gmail.com).");
           return;
         }
-
         onLogin();
       }
     } catch (err: unknown) {
       console.error('Login Error:', err);
-      setError(isAr ? "فشل تسجيل الدخول. يرجى التحقق من الاتصال والمحاولة مرة أخرى." : "Login failed. Please check your connection and try again.");
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      if (errorMessage.includes('popup-blocked')) {
+        setError(isAr ? "تم حظر النافذة المنبثقة. يرجى السماح بالبث المنبثق للموقع." : "Popup was blocked. Please allow popups for this site.");
+      } else if (errorMessage.includes('Network error')) {
+        setError(isAr ? "خطأ في الشبكة. يرجى التحقق من اتصالك." : "Network error. Please check your connection.");
+      } else {
+        setError(isAr ? "فشل تسجيل الدخول. يرجى المحاولة مرة أخرى." : "Login failed. Please try again.");
+      }
     } finally {
       setIsLoggingIn(false);
     }
