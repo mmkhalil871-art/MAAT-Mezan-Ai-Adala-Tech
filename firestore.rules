@@ -24,7 +24,7 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_-]+$');
     }
 
     function incoming() {
@@ -52,7 +52,7 @@ service cloud.firestore {
              data.keys().size() >= 6 && data.keys().size() <= 9 &&
              data.title is string && data.title.size() > 0 && data.title.size() <= 500 &&
              data.content is string && data.content.size() > 0 && data.content.size() <= 1000000 &&
-             data.type in ['law', 'regulation', 'decree', 'update', 'url', 'recommendation', 'convention', 'ministerial_decree'] &&
+             data.type in ['law', 'regulation', 'decree', 'update', 'url', 'recommendation', 'convention', 'ministerial_decree', 'circular', 'procedure'] &&
              data.uploadedBy is string && data.uploadedBy.size() <= 256 &&
              data.timestamp == request.time &&
              data.isPublic is bool &&
@@ -70,6 +70,16 @@ service cloud.firestore {
              data.timestamp == request.time &&
              data.details is map &&
              (!('itemId' in data) || (data.itemId is string && data.itemId.size() <= 128));
+    }
+
+    function isValidAdminRequest(data) {
+      return data.keys().hasAll(['userEmail', 'requestType', 'message', 'timestamp', 'status']) &&
+             data.keys().size() == 5 &&
+             data.userEmail is string && data.userEmail.size() <= 256 &&
+             data.requestType in ['add_document', 'other'] &&
+             data.message is string && data.message.size() > 0 && data.message.size() <= 5000 &&
+             data.timestamp == request.time &&
+             data.status in ['pending', 'viewed', 'archived'];
     }
 
     // --- Collection Routes ---
@@ -111,8 +121,8 @@ service cloud.firestore {
           isAdmin() || (
             // Owner can update specific fields, but cannot change identity or immutables
             incoming().uploadedBy == existing().uploadedBy && 
-            incoming().timestamp == existing().timestamp &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'type', 'fileName', 'url', 'relatedTo', 'isPublic'])
+            incoming().timestamp == request.time &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'type', 'fileName', 'url', 'relatedTo', 'isPublic', 'timestamp'])
           )
         );
       
@@ -128,6 +138,24 @@ service cloud.firestore {
       
       allow update: if false; 
       allow delete: if isValidId(logId) && isAdmin();
+    }
+
+    // Admin Requests
+    match /admin_requests/{requestId} {
+      allow create: if isSignedIn() && 
+        isValidId(requestId) && 
+        isValidAdminRequest(incoming()) &&
+        incoming().userEmail == request.auth.token.email;
+        
+      allow list: if isAdmin();
+      allow get: if isAdmin() && isValidId(requestId);
+      
+      allow update: if isAdmin() && 
+        isValidId(requestId) && 
+        isValidAdminRequest(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status']);
+        
+      allow delete: if isAdmin() && isValidId(requestId);
     }
   }
 }

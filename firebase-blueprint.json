@@ -28,7 +28,7 @@
       "properties": {
         "title": { "type": "string", "description": "Title of the document." },
         "content": { "type": "string", "description": "Text content or description of the URL." },
-        "type": { "type": "string", "enum": ["law", "regulation", "decree", "update", "url", "recommendation", "convention", "ministerial_decree"], "description": "Classification of the document." },
+        "type": { "type": "string", "enum": ["law", "regulation", "decree", "update", "url", "recommendation", "convention", "ministerial_decree", "circular", "procedure"], "description": "Classification of the document." },
         "uploadedBy": { "type": "string", "description": "Email of the expert who uploaded it." },
         "timestamp": { "type": "string", "format": "date-time", "description": "Internal server timestamp." },
         "relatedTo": { "type": "array", "items": { "type": "string" }, "description": "IDs of related laws or updates." },
@@ -50,6 +50,19 @@
         "details": { "type": "object", "description": "Contextual details of the change." }
       },
       "required": ["operation", "email", "timestamp"]
+    },
+    "AdminRequest": {
+      "title": "Admin Request",
+      "description": "Inbound request from users to administrators (e.g. adding documents).",
+      "type": "object",
+      "properties": {
+        "userEmail": { "type": "string", "description": "Email of the user making the request." },
+        "requestType": { "type": "string", "enum": ["add_document", "other"], "description": "Type of request." },
+        "message": { "type": "string", "description": "Detailed message or content of the request." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the request was created." },
+        "status": { "type": "string", "enum": ["pending", "viewed", "archived"], "description": "Current status of the request." }
+      },
+      "required": ["userEmail", "requestType", "message", "timestamp", "status"]
     }
   },
   "firestore": {
@@ -68,6 +81,10 @@
     "library_logs/{logId}": {
       "schema": "DepositionLog",
       "description": "Audit trail for all library modifications."
+    },
+    "admin_requests/{requestId}": {
+      "schema": "AdminRequest",
+      "description": "User messages and requests for admin action."
     }
   }
 }

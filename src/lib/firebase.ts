@@ -14,7 +14,9 @@ import {
   updateDoc,
   deleteDoc,
   getDocFromServer,
-  where
+  where,
+  QuerySnapshot,
+  DocumentData
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -186,7 +188,7 @@ export interface LibraryItem {
   id: string;
   title: string;
   content: string;
-  type: 'law' | 'regulation' | 'decree' | 'update' | 'url' | 'recommendation' | 'convention' | 'ministerial_decree';
+  type: 'law' | 'regulation' | 'decree' | 'update' | 'url' | 'recommendation' | 'convention' | 'ministerial_decree' | 'circular' | 'procedure';
   uploadedBy: string;
   timestamp: { seconds: number; nanoseconds: number } | null;
   isPublic: boolean;
@@ -202,6 +204,15 @@ export interface DepositionLog {
   email: string;
   timestamp: { seconds: number; nanoseconds: number } | null;
   details: Record<string, unknown>;
+}
+
+export interface AdminRequest {
+  id: string;
+  userEmail: string;
+  requestType: 'add_document' | 'other';
+  message: string;
+  timestamp: { seconds: number; nanoseconds: number } | null;
+  status: 'pending' | 'viewed' | 'archived';
 }
 
 export const addToLibrary = async (item: Omit<LibraryItem, 'id' | 'timestamp'>) => {
@@ -251,7 +262,7 @@ export const getLibraryItems = async (): Promise<LibraryItem[]> => {
         const q = query(collection(db, path), orderBy('timestamp', 'desc'));
         snapshot = await getDocs(q);
       }
-    } catch (_indexError) {
+    } catch {
       console.warn('[Library] Query with orderBy failed (possibly missing index). Falling back to client-side sorting.');
       // Fallback: Fetch everything without orderBy to be index-agnostic
       if (!user) {
@@ -261,14 +272,14 @@ export const getLibraryItems = async (): Promise<LibraryItem[]> => {
         try {
           const q = query(collection(db, path));
           snapshot = await getDocs(q);
-        } catch (_adminError) {
+        } catch {
           // If blanket query fails for non-admin, try public + own
           const publicQ = query(collection(db, path), where('isPublic', '==', true));
           const ownQ = query(collection(db, path), where('uploadedBy', '==', user.email));
           const [publicSnap, ownSnap] = await Promise.all([getDocs(publicQ), getDocs(ownQ)]);
           
           const itemsMap = new Map<string, LibraryItem>();
-          const processDocs = (snap: { docs: any[] }) => snap.docs.forEach((doc) => {
+          const processDocs = (snap: QuerySnapshot<DocumentData>) => snap.docs.forEach((doc) => {
             const data = doc.data();
             itemsMap.set(doc.id, { id: doc.id, ...data } as LibraryItem);
           });
@@ -276,12 +287,17 @@ export const getLibraryItems = async (): Promise<LibraryItem[]> => {
           processDocs(ownSnap);
           
           return Array.from(itemsMap.values()).sort((a, b) => {
-            const timeA = (a.timestamp as any)?.seconds || 0;
-            const timeB = (b.timestamp as any)?.seconds || 0;
+            const timeA = (a.timestamp as { seconds: number })?.seconds || (a.timestamp as { seconds?: number })?.seconds || 0;
+            const timeB = (b.timestamp as { seconds: number })?.seconds || (b.timestamp as { seconds?: number })?.seconds || 0;
             return timeB - timeA;
           });
         }
       }
+    }
+
+    if (!snapshot) {
+      console.warn('[Library] Snapshot is undefined after fallback attempts.');
+      return [];
     }
 
     const items = snapshot.docs.map(doc => ({
@@ -291,12 +307,17 @@ export const getLibraryItems = async (): Promise<LibraryItem[]> => {
 
     // Client-side sort fallback if needed (or just to be safe)
     return items.sort((a, b) => {
-      const timeA = (a.timestamp as { seconds: number })?.seconds || 0;
-      const timeB = (b.timestamp as { seconds: number })?.seconds || 0;
+      const timeA = (a.timestamp as { seconds: number })?.seconds || (a.timestamp as { seconds?: number })?.seconds || 0;
+      const timeB = (b.timestamp as { seconds: number })?.seconds || (b.timestamp as { seconds?: number })?.seconds || 0;
       return timeB - timeA;
     });
   } catch (error) {
     console.error('[Library] Final fetch failure:', error);
+    // If it's a permission error, we might want to return empty list instead of crashing UI
+    const rawError = String(error);
+    if (rawError.includes('permission-denied') || rawError.includes('Missing or insufficient permissions')) {
+      return [];
+    }
     handleFirestoreError(error, OperationType.LIST, path);
     return [];
   }
@@ -316,8 +337,9 @@ export const getDepositionLogs = async (): Promise<DepositionLog[]> => {
         id: doc.id,
         ...(doc.data() as Record<string, unknown>)
       } as DepositionLog));
-    } catch (_err) {
+    } catch {
       // Fallback for non-admins: only their own logs
+      console.warn('Admin log query failed, falling back to personal logs.');
       const q = query(collection(db, path), where('email', '==', user.email), orderBy('timestamp', 'desc'), limit(100));
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({
@@ -335,7 +357,11 @@ export const updateLibraryItem = async (id: string, updates: Partial<LibraryItem
   const path = `library/${id}`;
   try {
     const itemRef = doc(db, 'library', id);
-    await updateDoc(itemRef, updates);
+    // IMPORTANT: Security rules require timestamp to match request.time
+    await updateDoc(itemRef, {
+      ...updates,
+      timestamp: serverTimestamp()
+    });
     
     // Log the operation
     try {
@@ -396,6 +422,60 @@ export const deleteDepositionLog = async (id: string) => {
   try {
     const logRef = doc(db, 'library_logs', id);
     await deleteDoc(logRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+};
+
+export const createAdminRequest = async (request: Omit<AdminRequest, 'id' | 'timestamp' | 'status'>) => {
+  const path = 'admin_requests';
+  try {
+    const docRef = await addDoc(collection(db, path), {
+      ...request,
+      status: 'pending',
+      timestamp: serverTimestamp()
+    });
+    return docRef;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+    throw error;
+  }
+};
+
+export const getAdminRequests = async (): Promise<AdminRequest[]> => {
+  const path = 'admin_requests';
+  try {
+    const q = query(collection(db, path), orderBy('timestamp', 'desc'), limit(200));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...(doc.data() as Record<string, unknown>)
+    } as AdminRequest));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return [];
+  }
+};
+
+export const updateAdminRequestStatus = async (id: string, status: AdminRequest['status']) => {
+  const path = `admin_requests/${id}`;
+  try {
+    const docRef = doc(db, 'admin_requests', id);
+    await updateDoc(docRef, { 
+      status,
+      // Note: firestore.rules requires isValidAdminRequest which includes timestamp == request.time
+      timestamp: serverTimestamp()
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+};
+
+export const deleteAdminRequest = async (id: string) => {
+  const path = `admin_requests/${id}`;
+  try {
+    const docRef = doc(db, 'admin_requests', id);
+    await deleteDoc(docRef);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }

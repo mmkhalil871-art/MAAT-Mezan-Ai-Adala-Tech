@@ -25,12 +25,16 @@ import {
   PlusCircle,
   MinusCircle,
   X,
-  Info
+  Info,
+  User as UserIcon,
+  Inbox
 } from 'lucide-react';
 import { LegalWorkflow, Language } from '../types';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { motion } from 'motion/react';
+import { useEffect, useState } from 'react';
+import { getAdminRequests } from '../lib/firebase';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -47,6 +51,7 @@ interface SidebarProps {
   userEmail?: string | null;
   onLogout: () => void;
   onShowHistory: () => void;
+  onShowMessages: () => void;
   onShowAbout: () => void;
   theme: 'dark' | 'light';
   onThemeToggle: () => void;
@@ -80,6 +85,7 @@ export default function Sidebar({
   userEmail,
   onLogout,
   onShowHistory,
+  onShowMessages,
   onShowAbout,
   theme,
   onThemeToggle,
@@ -88,9 +94,28 @@ export default function Sidebar({
   textColor,
   onTextColorChange
 }: SidebarProps) {
+  const [pendingCount, setPendingCount] = useState(0);
   const isAr = language === 'ar';
   
-  const isAdmin = userEmail && userEmail === 'mostafa.khaleel871@gmail.com';
+  const isAdmin = userEmail && userEmail === 'm.mkhalil871@gmail.com'; // Fixed to use the user email from metadata
+
+  useEffect(() => {
+    if (isAdmin) {
+      const fetchPending = async () => {
+        try {
+          const reqs = await getAdminRequests();
+          const count = reqs.filter(r => r.status === 'pending').length;
+          setPendingCount(count);
+        } catch (e) {
+          console.error('Failed to fetch pending requests for badge:', e);
+        }
+      };
+      fetchPending();
+      // Poll every 60 seconds
+      const interval = setInterval(fetchPending, 60000);
+      return () => clearInterval(interval);
+    }
+  }, [isAdmin]);
 
   const adjustFont = (delta: number) => {
     onFontScaleChange(Math.min(Math.max(fontScale + delta, 0.8), 1.2));
@@ -370,23 +395,71 @@ export default function Sidebar({
           </div>
 
           {userEmail ? (
-            <button 
-              onClick={onShowHistory}
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-3 text-[12px] font-bold uppercase tracking-widest transition-all mb-2 border theme-radius",
-                theme === 'dark' 
-                  ? "text-gold-start bg-gold-start/5 border-gold-start/10 hover:bg-gold-start/10" 
-                  : "border-lite-border hover:bg-black/5 bg-lite-bg/50"
+            <div className="mb-4">
+              <div className={cn(
+                "w-full flex items-center gap-3 px-3 py-3 rounded-lg border mb-2 transition-all",
+                theme === 'dark' ? "bg-gold-start/5 border-gold-start/20" : "bg-lite-accent/5 border-lite-accent/20"
+              )}>
+                <div className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center text-[18px] font-bold shrink-0",
+                  theme === 'dark' ? "bg-gold-start text-bg-deep" : "bg-lite-accent text-white"
+                )} style={{ backgroundColor: activeColor, color: theme === 'light' ? 'white' : undefined }}>
+                  {userEmail[0].toUpperCase()}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[10px] font-black caps tracking-[0.1em] opacity-40">
+                    {isAr ? 'المستخدم الحالي' : 'CURRENT USER'}
+                  </span>
+                  <span className="text-[12px] font-bold truncate tracking-normal normal-case">
+                    {userEmail}
+                  </span>
+                </div>
+              </div>
+              <button 
+                onClick={onShowHistory}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-3 text-[12px] font-bold uppercase tracking-widest transition-all border theme-radius",
+                  theme === 'dark' 
+                    ? "text-gold-start bg-gold-start/5 border-gold-start/10 hover:bg-gold-start/10" 
+                    : "border-lite-border hover:bg-black/5 bg-lite-bg/50"
+                )}
+                style={{ 
+                  color: activeColor,
+                  backgroundColor: theme === 'light' ? `${textColor}08` : undefined,
+                  borderColor: theme === 'light' ? `${textColor}15` : undefined
+                }}
+              >
+                <History className="w-4 h-4" />
+                {isAr ? 'سجل العمليات' : 'History Log'}
+              </button>
+
+              {isAdmin && (
+                <button 
+                  onClick={onShowMessages}
+                  className={cn(
+                    "w-full flex items-center justify-between px-3 py-3 text-[12px] font-bold uppercase tracking-widest transition-all border theme-radius mt-2",
+                    theme === 'dark' 
+                      ? "text-blue-400 bg-blue-500/5 border-blue-500/10 hover:bg-blue-500/10" 
+                      : "border-lite-border hover:bg-black/5 bg-lite-bg/50"
+                  )}
+                  style={{ 
+                    color: theme === 'light' ? textColor : undefined,
+                    backgroundColor: theme === 'light' ? `${textColor}08` : undefined,
+                    borderColor: theme === 'light' ? `${textColor}15` : undefined
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <Inbox className="w-4 h-4" />
+                    {isAr ? 'بريد الطلبات' : 'Messages Log'}
+                  </div>
+                  {pendingCount > 0 && (
+                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-bg-deep text-[10px] font-black animate-bounce">
+                      {pendingCount}
+                    </span>
+                  )}
+                </button>
               )}
-              style={{ 
-                color: activeColor,
-                backgroundColor: theme === 'light' ? `${textColor}08` : undefined,
-                borderColor: theme === 'light' ? `${textColor}15` : undefined
-              }}
-            >
-              <History className="w-4 h-4" />
-              {isAr ? 'سجل العمليات' : 'History Log'}
-            </button>
+            </div>
           ) : (
             <button 
               onClick={async () => {
@@ -426,6 +499,12 @@ export default function Sidebar({
               <div className="w-1 h-1 rounded-full bg-emerald-500" />
               <span className="text-[8px] font-bold tracking-[0.2em] uppercase">Jurisprudence Base Synced</span>
             </div>
+            {userEmail && (
+              <div className="flex items-center gap-1.5">
+                 <UserIcon className="w-2.5 h-2.5" />
+                 <span className="text-[8px] font-bold truncate max-w-[100px]">{userEmail}</span>
+              </div>
+            )}
             <button 
               onClick={onShowAbout}
               className="p-1 hover:text-gold-start transition-colors"

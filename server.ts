@@ -91,6 +91,42 @@ async function startServer() {
     }
   });
 
+  // API Route for Content Analysis (Raw text classification)
+  app.post("/api/analyze-content", async (req, res) => {
+    const { content } = req.body;
+    if (!content) return res.status(400).json({ error: "Content is required" });
+
+    try {
+      const prompt = `Analyze this legal document text:
+      "${content.slice(0, 10000)}"
+      
+      Suggest the most appropriate category from this list: law, regulation, decree, ministerial_decree, convention, recommendation, update, circular, procedure.
+      Provide a highly precise legal-style suggested Title (Arabic and English).
+      Return as JSON ONLY: { "arTitle": "...", "enTitle": "...", "suggestedType": "..." }`;
+
+      const currentKey = (process.env.GEMINI_API_KEY || '').trim();
+      if (!currentKey) {
+        throw new Error("GEMINI_API_KEY is not configured on the server.");
+      }
+
+      const result = await ai.models.generateContent({
+        model: "gemini-flash-latest",
+        contents: prompt
+      });
+      
+      const output = result.text;
+      if (!output) throw new Error("Empty response from AI engine");
+      
+      const jsonStr = output.match(/\{[\s\S]*\}/)?.[0] || output;
+      const analysis = JSON.parse(jsonStr);
+
+      res.json(analysis);
+    } catch (error) {
+      console.error("Content Analysis Error:", error);
+      res.status(500).json({ error: "Could not analyze content" });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

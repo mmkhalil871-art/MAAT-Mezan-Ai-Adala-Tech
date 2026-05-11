@@ -13,33 +13,30 @@ import {
   Download, 
   Plus, 
   Link as LinkIcon,
-  X,
   FileText,
-  Clock,
-  User,
+  X,
   ExternalLink,
   Globe,
   Loader2,
+  MessageSquare,
   Sparkles,
   Check,
-  History as HistoryIcon,
   RotateCcw,
   BookOpen,
   Copy,
   Save,
   Lock,
-  Scale
+  Scale,
+  Info
 } from 'lucide-react';
 import { 
   getLibraryItems, 
   addToLibrary, 
   updateLibraryItem, 
   deleteLibraryItem, 
-  deleteDepositionLog,
-  getDepositionLogs,
   logOperation,
-  LibraryItem, 
-  DepositionLog 
+  createAdminRequest,
+  LibraryItem 
 } from '../lib/firebase';
 import { auth } from '../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -65,17 +62,17 @@ interface LibraryPanelProps {
 export default function LibraryPanel({ language }: LibraryPanelProps) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [optimisticItems, setOptimisticItems] = useState<LibraryItem[]>([]);
-  const [logs, setLogs] = useState<DepositionLog[]>([]);
-  const [activeTab, setActiveTab] = useState<'depository' | 'history'>('depository');
   const [isLoading, setIsLoading] = useState(true);
+  const [showChat, setShowChat] = useState(false);
+  const [chatMessage, setChatMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<LibraryItem | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [requestSent, setRequestSent] = useState(false);
+  const [isRequesting, setIsRequesting] = useState(false);
   const [deleteSuccessId, setDeleteSuccessId] = useState<string | null>(null);
-  const [deleteLogConfirmId, setDeleteLogConfirmId] = useState<string | null>(null);
-  const [isDeletingLog, setIsDeletingLog] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [recentlyDepositedIds, setRecentlyDepositedIds] = useState<string[]>([]);
   const [uploadQueue, setUploadQueue] = useState<{
@@ -112,14 +109,19 @@ export default function LibraryPanel({ language }: LibraryPanelProps) {
   const fetchItems = async () => {
     setIsLoading(true);
     try {
-      const [itemsData, logsData] = await Promise.all([
-        getLibraryItems(),
-        getDepositionLogs()
-      ]);
+      console.log('[LibraryPanel] Fetching data...');
+      let itemsData: LibraryItem[] = [];
+
+      try {
+        itemsData = await getLibraryItems();
+        console.log('[LibraryPanel] Fetched items:', itemsData.length);
+      } catch (e) {
+        console.error('[LibraryPanel] Items fetch failed:', e);
+      }
+
       setItems(itemsData);
-      setLogs(logsData);
     } catch (err) {
-      console.error('Failed to fetch library data:', err);
+      console.error('[LibraryPanel] Unexpected fetch error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -168,23 +170,8 @@ export default function LibraryPanel({ language }: LibraryPanelProps) {
       
       for (const file of files) {
         let content = '';
-        let type: LibraryItem['type'] = 'law';
-        const title = file.name.split('.')[0];
+        const originalTitle = file.name.split('.')[0];
         
-        // Auto-detect type from filename
-        const lowerName = file.name.toLowerCase();
-        if (lowerName.includes('قرار') || lowerName.includes('decree')) {
-          type = 'decree';
-        } else if (lowerName.includes('وزار') || lowerName.includes('ministerial')) {
-          type = 'ministerial_decree';
-        } else if (lowerName.includes('لائح') || lowerName.includes('regulation')) {
-          type = 'regulation';
-        } else if (lowerName.includes('توصي') || lowerName.includes('recommendation')) {
-          type = 'recommendation';
-        } else if (lowerName.includes('اتفاق') || lowerName.includes('convention')) {
-          type = 'convention';
-        }
-
         if (file.type === 'text/plain' || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
           content = await file.text();
         } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.endsWith('.docx')) {
@@ -205,19 +192,42 @@ export default function LibraryPanel({ language }: LibraryPanelProps) {
         }
 
         if (content) {
+          let type: LibraryItem['type'] = 'law';
+          let title = originalTitle;
+
+          // Call Gemini for auto-classification
+          try {
+            const response = await fetch('/api/analyze-content', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ content: content.slice(0, 10000) })
+            });
+            const data = await response.json();
+            if (!data.error) {
+              type = data.suggestedType || 'law';
+              title = isAr ? data.arTitle : data.enTitle;
+            }
+          } catch (e) {
+            console.warn('AI Classification failed, falling back to manual/filename detection', e);
+            // Fallback to filename detection
+            const lowerName = file.name.toLowerCase();
+            if (lowerName.includes('قرار') || lowerName.includes('decree')) type = 'decree';
+            else if (lowerName.includes('وزار') || lowerName.includes('ministerial')) type = 'ministerial_decree';
+            else if (lowerName.includes('لائح') || lowerName.includes('regulation')) type = 'regulation';
+          }
+
           newQueueItems.push({
             id: Math.random().toString(36).substr(2, 9),
             title,
             content,
             type,
-            isProcessed: false
+            isProcessed: true
           });
         }
       }
 
       if (newQueueItems.length > 0) {
         if (newQueueItems.length === 1 && !newTitle && !newContent) {
-          // If only one file and form is empty, populate the main form for convenience
           const item = newQueueItems[0];
           setNewTitle(item.title);
           setNewContent(item.content);
@@ -337,11 +347,11 @@ export default function LibraryPanel({ language }: LibraryPanelProps) {
       // Delay fetch to allow Firestore indexing, but rely on optimistic state for now
       setTimeout(() => fetchItems(), 2000);
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[Library] Failed to save library item(s):', err);
       let errorMsg = isAr ? 'فشل إيداع بعض المستندات. يرجى المحاولة مرة أخرى.' : 'Failed to deposit some documents. Please try again.';
       
-      const rawError = err.message || String(err);
+      const rawError = err instanceof Error ? err.message : String(err);
       if (rawError.includes('permission-denied') || rawError.includes('Missing or insufficient permissions')) {
         errorMsg = isAr ? 'ليس لديك صلاحية لإجراء هذه العملية. يرجى التأكد من تسجيل الدخول بحساب مفعل.' : 'You do not have permission to perform this action. Please ensure you are signed in with a verified account.';
       }
@@ -368,19 +378,6 @@ export default function LibraryPanel({ language }: LibraryPanelProps) {
       alert(`${isAr ? 'فشل حذف المستند' : 'Failed to delete document'}: ${errorMsg}`);
     } finally {
       setIsDeleting(null);
-    }
-  };
-
-  const handleDeleteLog = async (id: string) => {
-    setIsDeletingLog(id);
-    try {
-      await deleteDepositionLog(id);
-      setLogs(prev => prev.filter(log => log.id !== id));
-      setDeleteLogConfirmId(null);
-    } catch (err) {
-      console.error('Failed to delete log:', err);
-    } finally {
-      setIsDeletingLog(null);
     }
   };
 
@@ -564,33 +561,57 @@ export default function LibraryPanel({ language }: LibraryPanelProps) {
     index === self.findIndex((t) => t.id === item.id)
   );
 
-  const filteredItems = combinedItems.filter(item => 
-    item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.content.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredItems = combinedItems.filter(item => {
+    const titleMatch = (item.title || '').toLowerCase().includes(searchQuery.toLowerCase());
+    const contentMatch = (item.content || '').toLowerCase().includes(searchQuery.toLowerCase());
+    return titleMatch || contentMatch;
+  });
 
-  const lawItems = filteredItems.filter(item => item.type === 'law' && !recentlyDepositedIds.includes(item.id));
+  const lawItems = filteredItems.filter(item => (item.type === 'law' || !item.type) && !recentlyDepositedIds.includes(item.id));
   const decreeItems = filteredItems.filter(item => (item.type === 'decree' || item.type === 'ministerial_decree') && !recentlyDepositedIds.includes(item.id));
+  const regulationItems = filteredItems.filter(item => item.type === 'regulation' && !recentlyDepositedIds.includes(item.id));
+  const circularItems = filteredItems.filter(item => item.type === 'circular' && !recentlyDepositedIds.includes(item.id));
+  const procedureItems = filteredItems.filter(item => item.type === 'procedure' && !recentlyDepositedIds.includes(item.id));
   const recentItems = filteredItems.filter(item => recentlyDepositedIds.includes(item.id));
-  const otherItems = filteredItems.filter(item => item.type !== 'law' && item.type !== 'decree' && item.type !== 'ministerial_decree' && !recentlyDepositedIds.includes(item.id));
+  const otherItems = filteredItems.filter(item => 
+    item.type !== 'law' && 
+    item.type !== 'decree' && 
+    item.type !== 'ministerial_decree' && 
+    item.type !== 'regulation' &&
+    item.type !== 'circular' &&
+    item.type !== 'procedure' &&
+    item.type &&
+    !recentlyDepositedIds.includes(item.id)
+  );
 
   const translations = {
     title: isAr ? 'المكتبة القانونية' : 'Legal Library',
-    search: isAr ? 'البحث في القوانين واللوائح...' : 'Search laws and regulations...',
+    search: isAr ? 'البحث في القوانين واللوائح والوثائق...' : 'Search laws, regulations, and documents...',
     upload: isAr ? 'إيداع مستند جديد' : 'Deposit New Document',
     empty: isAr ? 'المكتبة فارغة حالياً' : 'Library is currently empty',
     related: isAr ? 'وثائق مرتبطة' : 'Related Documents',
     history: isAr ? 'سجل العمليات' : 'Operation History',
-    depository: isAr ? 'المستودع' : 'Depository',
+    depository: isAr ? 'المستودع الرقمي' : 'Digital Depository',
     reuse: isAr ? 'إعادة استخدام' : 'Reuse Data',
-    laws: isAr ? 'القوانين المتاحة' : 'Available Laws',
-    decrees: isAr ? 'القرارات المتاحة' : 'Available Decrees',
+    contents: isAr ? 'محتويات المكتبة' : 'Library Contents',
+    laws: isAr ? 'رف القوانين' : 'Law Shelf',
+    decrees: isAr ? 'رف القرارات الوزارية' : 'Ministerial Decrees Shelf',
+    regulations: isAr ? 'رف اللوائح' : 'Regulations Shelf',
+    circulars: isAr ? 'الكتب الدورية والمنشورات' : 'Circulars & Directives',
+    procedures: isAr ? 'القواعد والإجراءات الإدارية' : 'Administrative Procedures',
     others: isAr ? 'وثائق أخرى' : 'Other Documents',
     recent: isAr ? 'المودعة حديثاً' : 'Recently Deposited',
+    adminNotice: isAr ? 'يسمح فقط للمشرفين بإضافة المستندات' : 'Only Admins can add Documents',
+    adminContact: isAr ? 'تنبيه: إذا كنت ترغب في إضافة مستندات، يرجى التواصل مع المشرف.' : 'Notice: if you want to add documents contact the admin',
+    requestDocument: isAr ? 'إرسال طلب إضافة مستند' : 'Request to add a document',
+    aiCategorizing: isAr ? 'جاري التصنيف الذكي عبر الذكاء الاصطناعي...' : 'AI is auto-categorizing document...',
+    aiSuggested: isAr ? 'تم التصنيف تلقائياً' : 'Auto-classified',
     type: {
       law: isAr ? 'قانون' : 'Law',
       regulation: isAr ? 'لائحة' : 'Regulation',
       decree: isAr ? 'قرار' : 'Decree',
+      circular: isAr ? 'كتاب دوري' : 'Circular',
+      procedure: isAr ? 'إجراء إداري' : 'Procedure',
       update: isAr ? 'تحديث' : 'Update',
       recommendation: isAr ? 'توصية' : 'Recommendation',
       convention: isAr ? 'اتفاقية' : 'Convention',
@@ -613,11 +634,22 @@ export default function LibraryPanel({ language }: LibraryPanelProps) {
             </div>
             <div>
               <h2 className="text-xl font-bold font-serif text-gold-gradient tracking-tight">{translations.title}</h2>
-              <p className="text-[10px] caps tracking-widest opacity-60 mt-1">{isAr ? 'نظام الإيداع السيادي' : 'Sovereign Depository System'}</p>
+              <p className="text-[10px] caps tracking-widest opacity-60 mt-1 flex items-center gap-2">
+                {isAr ? 'نظام الإيداع السيادي' : 'Sovereign Depository System'}
+                {combinedItems.length > 0 && (
+                  <span className="px-2 py-0.5 bg-gold-start/10 border border-gold-start/20 text-gold-start rounded-full text-[9px] animate-in fade-in zoom-in">
+                    {combinedItems.length} {isAr ? 'وثيقة بداخل المستودع' : 'Documents Stored'}
+                  </span>
+                )}
+              </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
+             <div className="hidden md:flex flex-col items-end mr-4">
+                <span className="text-[10px] font-bold text-gold-start/60 caps tracking-widest">{isAr ? 'إجمالي المقتنيات' : 'TOTAL ASSETS'}</span>
+                <span className="text-xl font-mono text-gold-start leading-none">{combinedItems.length}</span>
+             </div>
             <button 
               onClick={fetchItems}
               disabled={isLoading}
@@ -632,201 +664,259 @@ export default function LibraryPanel({ language }: LibraryPanelProps) {
             >
               <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out" />
               <Plus className="w-4 h-4 relative z-10" />
-              <span className="relative z-10">{isAr ? 'إضافة قانون جديد' : 'ADD NEW LAW'}</span>
+              <span className="relative z-10">{isAr ? 'إيداع وثيقة جديدة' : 'DEPOSIT DOCUMENT'}</span>
             </button>
           </div>
         </div>
 
         <div className="flex gap-8">
-          {[
-            { id: 'depository', label: translations.depository, icon: BookOpen },
-            { id: 'history', label: translations.history, icon: HistoryIcon }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as 'depository' | 'history')}
-              className={cn(
-                "flex items-center gap-2 px-1 pb-4 text-[11px] font-bold caps transition-all relative",
-                activeTab === tab.id ? "text-gold-start" : "text-text-muted opacity-40 hover:opacity-100"
-              )}
-            >
-              <tab.icon className="w-3.5 h-3.5" />
-              {tab.label}
-              {activeTab === tab.id && (
-                <motion.div layoutId="tab-active" className="absolute bottom-0 left-0 right-0 h-0.5 bg-gold-gradient" />
-              )}
-            </button>
-          ))}
+          <div className={cn(
+            "flex items-center gap-2 px-1 pb-4 text-[11px] font-bold caps text-gold-start relative"
+          )}>
+            <BookOpen className="w-3.5 h-3.5" />
+            {translations.depository}
+            <motion.div layoutId="tab-active" className="absolute bottom-0 left-0 right-0 h-0.5 bg-gold-gradient" />
+          </div>
         </div>
       </header>
 
       <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
         <div className="max-w-[var(--max-content-width)] mx-auto flex flex-col gap-8">
           
-          {activeTab === 'depository' ? (
-            <>
-              {/* Search Bar */}
-              <div className="relative group">
-                <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted opacity-30 group-focus-within:text-gold-start group-focus-within:opacity-100 transition-all" />
-                <input 
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={translations.search}
-                  className="w-full bg-bg-sidebar/40 border border-border-subtle/50 py-4 px-14 text-[14px] focus:outline-none focus:border-gold-start/40 focus:bg-bg-sidebar transition-all"
-                />
-              </div>
+          <div className="relative group">
+            <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted opacity-30 group-focus-within:text-gold-start group-focus-within:opacity-100 transition-all" />
+            <input 
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={translations.search}
+              className="w-full bg-bg-sidebar/40 border border-border-subtle/50 py-4 px-14 text-[14px] focus:outline-none focus:border-gold-start/40 focus:bg-bg-sidebar transition-all shadow-inner"
+            />
+          </div>
 
-              {isLoading ? (
-                <div className="flex flex-col items-center py-20 opacity-20">
-                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}>
-                    <Library className="w-12 h-12 text-gold-start" />
-                  </motion.div>
-                </div>
-              ) : filteredItems.length === 0 ? (
-                <div className="text-center py-20 opacity-40">
-                  <p className="text-[12px] font-bold caps tracking-widest">{translations.empty}</p>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-12">
-                  {recentItems.length > 0 && (
-                    <section>
-                      <h3 className="text-[11px] font-black caps tracking-[0.3em] text-gold-start mb-6 flex items-center gap-3">
-                        <Upload className="w-4 h-4" />
-                        {translations.recent}
-                        <div className="h-px bg-gold-start/20 flex-1" />
-                        <span className="text-[10px] opacity-40 font-mono">[{recentItems.length}]</span>
-                      </h3>
-                      <div className="grid grid-cols-1 gap-4">
-                        {recentItems.map(renderItemCard)}
-                      </div>
-                    </section>
-                  )}
-
-                  {lawItems.length > 0 && (
-                    <section>
-                      <h3 className="text-[11px] font-black caps tracking-[0.3em] text-gold-start/60 mb-6 flex items-center gap-3">
-                        <Scale className="w-4 h-4" />
-                        {translations.laws}
-                        <div className="h-px bg-gold-start/20 flex-1" />
-                        <span className="text-[10px] opacity-40 font-mono">[{lawItems.length}]</span>
-                      </h3>
-                      <div className="grid grid-cols-1 gap-4">
-                        {lawItems.map(renderItemCard)}
-                      </div>
-                    </section>
-                  )}
-
-                  {decreeItems.length > 0 && (
-                    <section>
-                      <h3 className="text-[11px] font-black caps tracking-[0.3em] text-gold-start/60 mb-6 flex items-center gap-3">
-                        <FileText className="w-4 h-4" />
-                        {translations.decrees}
-                        <div className="h-px bg-gold-start/20 flex-1" />
-                        <span className="text-[10px] opacity-40 font-mono">[{decreeItems.length}]</span>
-                      </h3>
-                      <div className="grid grid-cols-1 gap-4">
-                        {decreeItems.map(renderItemCard)}
-                      </div>
-                    </section>
-                  )}
-
-                  {otherItems.length > 0 && (
-                    <section>
-                      <h3 className="text-[11px] font-black caps tracking-[0.3em] text-text-muted/40 mb-6 flex items-center gap-3">
-                        <BookOpen className="w-4 h-4" />
-                        {translations.others}
-                        <div className="h-px bg-border-subtle/20 flex-1" />
-                        <span className="text-[10px] opacity-40 font-mono">[{otherItems.length}]</span>
-                      </h3>
-                      <div className="grid grid-cols-1 gap-4">
-                        {otherItems.map(renderItemCard)}
-                      </div>
-                    </section>
-                  )}
-                </div>
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-gold-start/5 border border-gold-start/10 p-5 flex flex-col md:flex-row items-center gap-6 shadow-sm"
+          >
+            <div className="w-12 h-12 rounded-full bg-gold-start/10 flex items-center justify-center shrink-0 border border-gold-start/20">
+              <Info className="w-5 h-5 text-gold-start" />
+            </div>
+            <div className="flex-1 text-center md:text-right">
+              <p className="text-[14px] font-serif font-bold text-gold-start mb-1 tracking-wide">{translations.adminNotice}</p>
+              <p className="text-[11px] text-text-muted opacity-60 font-medium leading-relaxed">{translations.adminContact}</p>
+            </div>
+            <button 
+              onClick={() => setShowChat(true)}
+              className={cn(
+                "flex items-center gap-3 px-6 py-2.5 transition-all text-[10px] font-black caps tracking-[0.2em] group",
+                requestSent 
+                  ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-500" 
+                  : "bg-bg-deep border border-gold-start/20 text-gold-start hover:bg-gold-start hover:text-bg-deep"
               )}
-            </>
-          ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {isLoading ? (
-                <div className="flex flex-col items-center py-20 opacity-20">
-                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}>
-                    <HistoryIcon className="w-12 h-12 text-gold-start" />
-                  </motion.div>
-                </div>
-              ) : logs.length === 0 ? (
-                 <div className="h-64 flex flex-col items-center justify-center text-text-muted opacity-30 border border-dashed border-border-subtle/50">
-                    <HistoryIcon className="w-12 h-12 mb-4" />
-                    <p className="text-[11px] caps font-bold tracking-widest">{isAr ? 'لا توجد عمليات مسجلة' : 'No history recorded yet'}</p>
-                 </div>
-              ) : logs.map((log) => (
-                <div key={log.id} className="bg-bg-sidebar/30 border border-border-subtle/40 p-5 flex items-center justify-between group">
-                  <div className="flex items-center gap-4">
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center",
-                      log.operation === 'create' ? "bg-green-500/10 text-green-500" :
-                      log.operation === 'update' ? "bg-blue-500/10 text-blue-500" :
-                      log.operation === 'delete' ? "bg-red-500/10 text-red-500" : "bg-gold-start/10 text-gold-start"
-                    )}>
-                      {log.operation === 'create' ? <Plus className="w-4 h-4" /> :
-                       log.operation === 'update' ? <Edit3 className="w-4 h-4" /> :
-                       log.operation === 'delete' ? <Trash2 className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+            >
+              <MessageSquare className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+              {translations.requestDocument}
+            </button>
+          </motion.div>
+
+          <AnimatePresence>
+            {showChat && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="fixed bottom-8 end-8 w-80 bg-bg-sidebar border border-gold-start/30 shadow-2xl z-50 flex flex-col logo-3d"
+              >
+                <div className="p-4 border-b border-gold-start/20 bg-gold-start/5 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gold-start/10 flex items-center justify-center border border-gold-start/20">
+                      <Sparkles className="w-4 h-4 text-gold-start" />
                     </div>
                     <div>
-                      <h4 className="text-[13px] font-bold text-text-main uppercase">
-                        {log.operation}: {(log.details?.title as string) || (log.details?.url as string) || (isAr ? 'عملية مبهمة' : 'Unknown Operation')}
-                      </h4>
-                      <p className="text-[11px] text-text-muted opacity-50 flex items-center gap-2 mt-1">
-                        <User className="w-3 h-3" /> {log.email} • <Clock className="w-3 h-3" /> {log.timestamp?.seconds ? new Date(log.timestamp.seconds * 1000).toLocaleString() : '...'}
-                      </p>
+                        <h4 className="text-[10px] font-black caps tracking-widest text-gold-start">{isAr ? 'مساعد الإضافة' : 'Addition Assistant'}</h4>
+                        <p className="text-[8px] text-text-muted opacity-60 caps">{isAr ? 'أرسل طلبك للمشرف' : 'Send your demand to admin'}</p>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center gap-3">
-                    {deleteLogConfirmId === log.id ? (
-                      <div className="flex items-center gap-2">
-                        <button 
-                          onClick={() => handleDeleteLog(log.id)}
-                          className="px-3 py-1 bg-red-500 text-white text-[9px] caps font-bold border border-red-400"
-                        >
-                          {isAr ? 'حذف' : 'Del'}
-                        </button>
-                        <button 
-                          onClick={() => setDeleteLogConfirmId(null)}
-                          className="px-3 py-1 bg-bg-soft text-text-muted text-[9px] caps font-bold border border-border-subtle"
-                        >
-                          {isAr ? 'تراجع' : 'Exit'}
-                        </button>
-                      </div>
-                    ) : (
-                      <button 
-                        onClick={() => setDeleteLogConfirmId(log.id)}
-                        disabled={!!isDeletingLog}
-                        className="p-2 text-text-muted opacity-0 group-hover:opacity-100 transition-all hover:text-red-500"
-                        title={isAr ? 'حذف السجل' : 'Delete Log'}
-                      >
-                        {isDeletingLog === log.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                      </button>
-                    )}
-
+                  <button onClick={() => setShowChat(false)} className="text-text-muted hover:text-gold-start">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="p-4 bg-bg-deep/50 min-h-[100px] flex flex-col justify-end">
+                   <div className="bg-gold-start/10 border border-gold-start/20 p-3 rounded-sm mb-4">
+                      <p className="text-[11px] text-text-main leading-relaxed">
+                        {isAr 
+                          ? 'مرحباً! يرجى كتابة تفاصيل المستند الذي ترغب في إضافته للمكتبة (العنوان، النوع، أو أي معلومات أخرى).' 
+                          : 'Hello! Please type the details of the document you would like to add (Title, Type, or any other info).'}
+                      </p>
+                   </div>
+                   {requestSent && (
+                     <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-sm animate-in fade-in slide-in-from-bottom-2">
+                        <p className="text-[11px] text-emerald-500 font-bold">
+                          {isAr ? 'تم إرسال طلبك بنجاح للمشرف!' : 'Your request has been sent to the admin!'}
+                        </p>
+                     </div>
+                   )}
+                </div>
+                {!requestSent && (
+                  <div className="p-4 border-t border-gold-start/10 bg-bg-sidebar">
+                    <textarea 
+                      value={chatMessage}
+                      onChange={(e) => setChatMessage(e.target.value)}
+                      placeholder={isAr ? 'اكتب طلبك هنا...' : 'Type your demand here...'}
+                      className="w-full bg-bg-deep border border-border-subtle p-3 text-[12px] text-text-main placeholder:opacity-30 focus:outline-none focus:border-gold-start/40 h-24 mb-3 resize-none"
+                    />
                     <button 
-                      onClick={() => {
-                        if (log.details) {
-                          setNewTitle((log.details.title as string) || '');
-                          setNewContent((log.details.content as string) || '');
-                          setNewUrl((log.details.url as string) || '');
-                          setNewType((log.details.type as LibraryItem['type']) || 'law');
-                          setIsUploadModalOpen(true);
+                      disabled={isRequesting || !chatMessage.trim()}
+                      onClick={async () => {
+                        if (!auth.currentUser?.email) return;
+                        setIsRequesting(true);
+                        try {
+                          await createAdminRequest({
+                            userEmail: auth.currentUser.email,
+                            requestType: 'add_document',
+                            message: chatMessage
+                          });
+                          setRequestSent(true);
+                          setChatMessage('');
+                          setTimeout(() => {
+                            setShowChat(false);
+                            setRequestSent(false);
+                          }, 3000);
+                        } catch (e) {
+                          console.error(e);
+                        } finally {
+                          setIsRequesting(false);
                         }
                       }}
-                      className="flex items-center gap-2 text-[10px] font-bold caps text-gold-start opacity-0 group-hover:opacity-100 transition-all hover:underline"
+                      className="w-full py-2 bg-gold-gradient text-bg-deep text-[10px] font-black caps tracking-widest flex items-center justify-center gap-2"
                     >
-                      <RotateCcw className="w-3 h-3" /> {translations.reuse}
+                      {isRequesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      {isAr ? 'إرسال الطلب' : 'SEND DEMAND'}
                     </button>
                   </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {isLoading ? (
+            <div className="flex flex-col items-center py-20 opacity-20">
+              <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}>
+                <Library className="w-12 h-12 text-gold-start" />
+              </motion.div>
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="text-center py-20 opacity-40">
+              <p className="text-[12px] font-bold caps tracking-widest">{translations.empty}</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-12">
+              <div className="flex items-center gap-4 py-4 border-b border-gold-start/10 mb-2">
+                <div className="w-1.5 h-8 bg-gold-gradient rounded-full" />
+                <div>
+                    <h3 className="text-lg font-serif text-gold-start font-bold uppercase tracking-wide">{translations.contents}</h3>
+                    <p className="text-[10px] text-text-muted opacity-40 caps tracking-widest">{isAr ? 'مصنفة حسب النوع والأهمية السيادية' : 'Categorized by type and strategic importance'}</p>
                 </div>
-              ))}
+              </div>
+
+              {recentItems.length > 0 && (
+                <section>
+                  <h3 className="text-[11px] font-black caps tracking-[0.3em] text-gold-start mb-6 flex items-center gap-3">
+                    <Upload className="w-4 h-4" />
+                    {translations.recent}
+                    <div className="h-px bg-gold-start/20 flex-1" />
+                    <span className="text-[10px] opacity-40 font-mono">[{recentItems.length}]</span>
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4">
+                    {recentItems.map(renderItemCard)}
+                  </div>
+                </section>
+              )}
+
+              {lawItems.length > 0 && (
+                <section>
+                  <h3 className="text-[11px] font-black caps tracking-[0.3em] text-gold-start/60 mb-6 flex items-center gap-3">
+                    <Scale className="w-4 h-4" />
+                    {translations.laws}
+                    <div className="h-px bg-gold-start/20 flex-1" />
+                    <span className="text-[10px] opacity-40 font-mono">[{lawItems.length}]</span>
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4">
+                    {lawItems.map(renderItemCard)}
+                  </div>
+                </section>
+              )}
+              
+              {regulationItems.length > 0 && (
+                <section>
+                  <h3 className="text-[11px] font-black caps tracking-[0.3em] text-gold-start/60 mb-6 flex items-center gap-3">
+                    <BookOpen className="w-4 h-4" />
+                    {translations.regulations}
+                    <div className="h-px bg-gold-start/20 flex-1" />
+                    <span className="text-[10px] opacity-40 font-mono">[{regulationItems.length}]</span>
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4">
+                    {regulationItems.map(renderItemCard)}
+                  </div>
+                </section>
+              )}
+
+              {decreeItems.length > 0 && (
+                <section>
+                  <h3 className="text-[11px] font-black caps tracking-[0.3em] text-gold-start/60 mb-6 flex items-center gap-3">
+                    <FileText className="w-4 h-4" />
+                    {translations.decrees}
+                    <div className="h-px bg-gold-start/20 flex-1" />
+                    <span className="text-[10px] opacity-40 font-mono">[{decreeItems.length}]</span>
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4">
+                    {decreeItems.map(renderItemCard)}
+                  </div>
+                </section>
+              )}
+
+              {circularItems.length > 0 && (
+                <section>
+                  <h3 className="text-[11px] font-black caps tracking-[0.3em] text-gold-start/60 mb-6 flex items-center gap-3">
+                    <Sparkles className="w-4 h-4" />
+                    {translations.circulars}
+                    <div className="h-px bg-gold-start/20 flex-1" />
+                    <span className="text-[10px] opacity-40 font-mono">[{circularItems.length}]</span>
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4">
+                    {circularItems.map(renderItemCard)}
+                  </div>
+                </section>
+              )}
+
+              {procedureItems.length > 0 && (
+                <section>
+                  <h3 className="text-[11px] font-black caps tracking-[0.3em] text-gold-start/60 mb-6 flex items-center gap-3">
+                    <Check className="w-4 h-4" />
+                    {translations.procedures}
+                    <div className="h-px bg-gold-start/20 flex-1" />
+                    <span className="text-[10px] opacity-40 font-mono">[{procedureItems.length}]</span>
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4">
+                    {procedureItems.map(renderItemCard)}
+                  </div>
+                </section>
+              )}
+
+              {otherItems.length > 0 && (
+                <section>
+                  <h3 className="text-[11px] font-black caps tracking-[0.3em] text-text-muted/40 mb-6 flex items-center gap-3">
+                    <BookOpen className="w-4 h-4" />
+                    {translations.others}
+                    <div className="h-px bg-border-subtle/20 flex-1" />
+                    <span className="text-[10px] opacity-40 font-mono">[{otherItems.length}]</span>
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4">
+                    {otherItems.map(renderItemCard)}
+                  </div>
+                </section>
+              )}
             </div>
           )}
         </div>
@@ -948,11 +1038,24 @@ export default function LibraryPanel({ language }: LibraryPanelProps) {
                     <div className="space-y-2">
                       {uploadQueue.map((item, idx) => (
                         <div key={item.id} className="flex items-center gap-3 bg-bg-sidebar border border-border-subtle/50 p-3 group animate-in slide-in-from-top-1">
-                          <div className="w-8 h-8 flex items-center justify-center bg-bg-deep border border-border-subtle text-gold-start">
+                          <div className="w-8 h-8 flex items-center justify-center bg-bg-deep border border-border-subtle text-gold-start relative">
                             <span className="text-[8px] font-black">{idx + 1}</span>
+                            {item.isProcessed && (
+                               <div className="absolute -top-1 -right-1">
+                                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping absolute" />
+                                 <div className="w-2 h-2 bg-emerald-500 rounded-full relative" />
+                               </div>
+                            )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h4 className="text-[12px] font-bold text-text-main truncate">{item.title}</h4>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-[12px] font-bold text-text-main truncate">{item.title}</h4>
+                              {item.isProcessed && (
+                                <span className="text-[8px] px-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold caps">
+                                  {translations.aiSuggested}
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-3 mt-1">
                               <select 
                                 value={item.type}
@@ -961,11 +1064,13 @@ export default function LibraryPanel({ language }: LibraryPanelProps) {
                                 }}
                                 className="bg-transparent border-none p-0 text-[10px] text-gold-start/60 focus:ring-0 cursor-pointer hover:text-gold-start"
                               >
-                                <option value="law">{isAr ? 'قانون' : 'Law'}</option>
-                                <option value="decree">{isAr ? 'قرار' : 'Decree'}</option>
-                                <option value="ministerial_decree">{isAr ? 'قرار وزاري' : 'Ministerial Decree'}</option>
-                                <option value="regulation">{isAr ? 'لائحة' : 'Regulation'}</option>
-                                <option value="convention">{isAr ? 'اتفاقية' : 'Convention'}</option>
+                                <option value="law">{translations.type.law}</option>
+                                <option value="decree">{translations.type.decree}</option>
+                                <option value="ministerial_decree">{translations.type.ministerial_decree}</option>
+                                <option value="regulation">{translations.type.regulation}</option>
+                                <option value="circular">{translations.type.circular}</option>
+                                <option value="procedure">{translations.type.procedure}</option>
+                                <option value="convention">{translations.type.convention}</option>
                               </select>
                             </div>
                           </div>
@@ -1008,6 +1113,8 @@ export default function LibraryPanel({ language }: LibraryPanelProps) {
                       <option value="regulation">{isAr ? 'لائحة' : 'Regulation'}</option>
                       <option value="decree">{isAr ? 'قرار' : 'Decree'}</option>
                       <option value="ministerial_decree">{isAr ? 'قرار وزاري' : 'Ministerial Decree'}</option>
+                      <option value="circular">{isAr ? 'كتاب دوري' : 'Circular'}</option>
+                      <option value="procedure">{isAr ? 'إجراء إداري' : 'Procedure'}</option>
                       <option value="convention">{isAr ? 'اتفاقية' : 'Convention'}</option>
                       <option value="recommendation">{isAr ? 'توصية' : 'Recommendation'}</option>
                       <option value="update">{isAr ? 'تحديث/تعديل' : 'Update/Amendment'}</option>

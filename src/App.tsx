@@ -10,6 +10,7 @@ import LoginPage from './components/LoginPage';
 import AdminPanel from './components/AdminPanel';
 import LibraryPanel from './components/LibraryPanel';
 import HistoryPanel from './components/HistoryPanel';
+import MessagesPanel from './components/MessagesPanel';
 import AboutModal from './components/AboutModal';
 import { WORKFLOW_ACTIONS, OUTCOME_ACTIONS } from './constants';
 import { Message, LegalWorkflow, Language, FormType, MessageAction } from './types';
@@ -37,6 +38,7 @@ export default function App() {
   const [textColor, setTextColor] = useState<string>('#E6C682');
   const [formType, setFormType] = useState<FormType>('Contract');
   const [showHistory, setShowHistory] = useState(false);
+  const [showMessages, setShowMessages] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
   const [pendingContent, setPendingContent] = useState<{ content: string; files?: File[] } | null>(null);
@@ -331,6 +333,7 @@ export default function App() {
         userEmail={user?.email}
         onLogout={handleExit}
         onShowHistory={() => setShowHistory(true)}
+        onShowMessages={() => setShowMessages(true)}
         onShowAbout={() => setShowAbout(true)}
         theme={theme}
         onThemeToggle={toggleTheme}
@@ -354,7 +357,9 @@ export default function App() {
               {currentWorkflow === 'Admin' ? (
                 <AdminPanel />
               ) : currentWorkflow === 'Library' ? (
-                <LibraryPanel language={language} />
+                <LibraryPanel 
+                  language={language} 
+                />
               ) : (
                 <ChatArea 
                   messages={messages} 
@@ -395,6 +400,23 @@ export default function App() {
                   // If reuse is triggered, we can populate draft or library
                   setShowHistory(false);
                 }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showMessages && (
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="absolute top-0 bottom-0 right-0 w-96 z-[60]"
+            >
+              <MessagesPanel 
+                language={language} 
+                onClose={() => setShowMessages(false)}
               />
             </motion.div>
           )}
