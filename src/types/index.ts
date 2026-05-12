@@ -15,6 +15,7 @@ export type LegalWorkflow =
   | 'Forms'
   | 'Library'
   | 'Summarization'
+  | 'Relationships'
   | 'Admin';
 
 export type Language = 'en' | 'ar';

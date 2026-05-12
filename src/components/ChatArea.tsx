@@ -13,6 +13,7 @@ import {
   Check, 
   Paperclip,
   Menu,
+  Network,
   FileText,
   FileDown,
   Languages,
@@ -264,6 +265,7 @@ export default function ChatArea({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {[
                   { icon: FileText, title: isAr ? "صياغة تشريعية" : "Legislative Drafting", desc: isAr ? "إعداد قرارات وزارية ومراسيم" : "Prepare ministerial decrees & legislation", prompt: isAr ? "صياغة قرار جديد للمناطق الاستثمارية." : "Draft a new decree for investment zones." },
+                  { icon: Network, title: isAr ? "الروابط القانونية" : "Legal Relationships", desc: isAr ? "خارطة التشريعات والمعاهدات" : "Map legislation & treaties", prompt: isAr ? "تحليل الروابط القانونية لهذا النص مع التشريعات والمعاهدات الدولية." : "Analyze legal relationships of this text with legislation and international treaties." },
                   { icon: Sparkles, title: isAr ? "تحليل قضائي" : "Judicial Analysis", desc: isAr ? "تلخيص أحكام وتحديد ثغرات" : "Summarize rulings & identify gaps", prompt: isAr ? "لخص هذا الحكم في مذكرة قانونية." : "Summarize this judicial ruling into a memo." },
                   { icon: FileDown, title: isAr ? "خطاب رسمي/قانوني" : "Formal/Legal Letter", desc: isAr ? "صياغة خطابات رسمية أو قانونية" : "Draft formal or legal correspondence", prompt: isAr ? "إعداد خطاب رسمي موجه إلى..." : "Draft a formal letter addressed to..." },
                   { icon: Languages, title: isAr ? "ترجمة قانونية" : "Legal Translation", desc: isAr ? "ترجمة دقيقة للنصوص السيادية" : "Accurate translation of sovereign texts", prompt: isAr ? "ترجمة رسمية لهذا البند..." : "Formal translation of this clause..." },

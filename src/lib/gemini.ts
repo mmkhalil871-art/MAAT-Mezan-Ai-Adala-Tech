@@ -136,6 +136,19 @@ export async function getLegalAssistantResponse(
     Use formal legal language.`;
   }
   
+  if (workflow === 'Relationships') {
+    contextPrompt += `\n\nTASK: Identify and map the relationships between the provided law/article/regulation and other related legal instruments, including:
+    - Domestic Legislation: Decrees, regulations, and judicial principles.
+    - International & Regional: Covenants, documents, conventions, protocols, and recommendations.
+    
+    Focus on:
+    - Hierarchical relationships (Executive Decrees linked to a certain Law).
+    - Amending vs amended relationships.
+    - Reference relationships.
+    - Compliance and ratification status for international instruments.
+    Provide a structured overview of the legal network.`;
+  }
+  
   const response = await ai.models.generateContent({
     model,
     contents,
@@ -180,6 +193,19 @@ export async function getLegalMultimodalResponse(
         2. Facts (الوقائع)
         3. Conclusion/Result (النتيجة)
         Use formal legal language. Ensure all names, dates, and case numbers are accurately preserved.`;
+    }
+
+    if (workflow === 'Relationships') {
+        contextPrompt += `\n\nTASK: Analyze the attached documents to identify and map relationships between the specific laws, articles, or regulations mentioned and other related legal instruments.
+        SCOPE:
+        - Domestic: Related legislation, decrees, and circulars.
+        - International/Regional: Covenants, conventions, protocols, and recommendations.
+        
+        STRUCTURE: 
+        - Primary Instrument Identification.
+        - Related Legislation/Decrees/Conventions.
+        - Nature of Relationship (Amendment, Implementation, Conflict, Harmonization).
+        Use formal legal language and maintain the hierarchy of norms.`;
     }
 
     const response = await ai.models.generateContent({
