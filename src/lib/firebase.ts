@@ -148,6 +148,10 @@ export const signInWithGoogle = async () => {
       throw new Error('Sign-in popup was blocked by your browser. Please allow popups for this site.', { cause: error });
     }
 
+    if (errorCode === 'auth/unauthorized-domain') {
+      throw new Error('This domain is not authorized in the Firebase Console. Please add your Netlify domain to the Authorized Domains list in the Firebase Console under Authentication > Settings.', { cause: error });
+    }
+
     console.error('Login error detail:', { errorCode, errorMessage });
     throw error;
   }
@@ -210,6 +214,15 @@ export interface AdminRequest {
   message: string;
   timestamp: { seconds: number; nanoseconds: number } | null;
   status: 'pending' | 'viewed' | 'archived';
+}
+
+export interface ChatHistoryItem {
+  id: string;
+  userEmail: string;
+  userMessage: string;
+  aiResponse: string;
+  timestamp: { seconds: number; nanoseconds: number } | null;
+  workflow: string;
 }
 
 export const addToLibrary = async (item: Omit<LibraryItem, 'id' | 'timestamp'>) => {
@@ -472,6 +485,51 @@ export const deleteAdminRequest = async (id: string) => {
   const path = `admin_requests/${id}`;
   try {
     const docRef = doc(db, 'admin_requests', id);
+    await deleteDoc(docRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+};
+
+export const saveChatHistory = async (history: Omit<ChatHistoryItem, 'id' | 'timestamp'>) => {
+  const path = 'chat_history';
+  try {
+    await addDoc(collection(db, path), {
+      ...history,
+      timestamp: serverTimestamp()
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+};
+
+export const getChatHistory = async (): Promise<ChatHistoryItem[]> => {
+  const path = 'chat_history';
+  const user = auth.currentUser;
+  if (!user) return [];
+  
+  try {
+    const q = query(
+      collection(db, path), 
+      where('userEmail', '==', user.email), 
+      orderBy('timestamp', 'desc'), 
+      limit(50)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...(doc.data() as Record<string, unknown>)
+    } as ChatHistoryItem));
+  } catch (error) {
+    console.error('Failed to fetch chat history:', error);
+    return [];
+  }
+};
+
+export const deleteChatHistory = async (id: string) => {
+  const path = `chat_history/${id}`;
+  try {
+    const docRef = doc(db, 'chat_history', id);
     await deleteDoc(docRef);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);

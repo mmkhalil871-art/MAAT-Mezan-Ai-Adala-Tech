@@ -149,6 +149,15 @@ export async function getLegalAssistantResponse(
     Provide a structured overview of the legal network.`;
   }
   
+  if (workflow === 'ProvisionSearch') {
+    contextPrompt += `\n\nTASK: Identify and extract the specific governing legal texts, articles, or provisions that apply to the user's inquiry or the provided situation. 
+    Focus on:
+    - Identifying the relevant Law or Code.
+    - Specifying the exact Articles and their verbatim text.
+    - Highlighting mandatory vs optional provisions.
+    - Citing relevant Executive Decrees if applicable.`;
+  }
+  
   const response = await ai.models.generateContent({
     model,
     contents,
@@ -206,6 +215,15 @@ export async function getLegalMultimodalResponse(
         - Related Legislation/Decrees/Conventions.
         - Nature of Relationship (Amendment, Implementation, Conflict, Harmonization).
         Use formal legal language and maintain the hierarchy of norms.`;
+    }
+
+    if (workflow === 'ProvisionSearch') {
+        contextPrompt += `\n\nTASK: Search the attached documents and your knowledge base to extract the governing legal provisions relevant to this query.
+        STRUCTURE:
+        - Governing Instruments (Laws/Decrees).
+        - Applicable Articles (Verbatim text).
+        - Legal Reasoning (Why these texts apply).
+        - Status (Active/Amended/Repealed).`;
     }
 
     const response = await ai.models.generateContent({

@@ -45,6 +45,10 @@ export default function LoginPage({ onLogin, onGuestAccess, isAr, theme, onTheme
       const errorMessage = err instanceof Error ? err.message : String(err);
       if (errorMessage.includes('popup-blocked')) {
         setError(isAr ? "تم حظر النافذة المنبثقة. يرجى السماح بالبث المنبثق للموقع." : "Popup was blocked. Please allow popups for this site.");
+      } else if (errorMessage.includes('unauthorized-domain')) {
+        setError(isAr 
+          ? "هذا النطاق (domain) غير مصرح به في Firebase. يرجى إضافته في إعدادات Firebase." 
+          : "Domain unauthorized. Add this URL to 'Authorized Domains' in Firebase Console.");
       } else if (errorMessage.includes('Network error')) {
         setError(isAr ? "خطأ في الشبكة. يرجى التحقق من اتصالك." : "Network error. Please check your connection.");
       } else {

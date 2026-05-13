@@ -68,6 +68,7 @@ const workflows: { id: LegalWorkflow; label: { en: string; ar: string }; icon: R
   { id: 'Analysis', label: { en: 'Analysis', ar: 'التحليل' }, icon: Scale },
   { id: 'Interpretation', label: { en: 'Interpret', ar: 'التفسير' }, icon: Globe },
   { id: 'Library', label: { en: 'Library', ar: 'المكتبة' }, icon: Library },
+  { id: 'History', label: { en: 'Q&A History', ar: 'سجل الأسئلة' }, icon: History },
   { id: 'Summarization', label: { en: 'Ruling Summary', ar: 'تلخيص الأحكام' }, icon: FileSearch },
   { id: 'Forms', label: { en: 'Forms', ar: 'النماذج' }, icon: FileSignature },
   { id: 'Translation', label: { en: 'Translate', ar: 'الترجمة' }, icon: Languages },

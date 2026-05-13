@@ -23,7 +23,8 @@ import {
   Sun,
   Moon,
   HelpCircle,
-  X
+  X,
+  Search
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Message, LegalWorkflow, Language, FormType, MessageAction } from '../types';
@@ -265,6 +266,7 @@ export default function ChatArea({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {[
                   { icon: FileText, title: isAr ? "صياغة تشريعية" : "Legislative Drafting", desc: isAr ? "إعداد قرارات وزارية ومراسيم" : "Prepare ministerial decrees & legislation", prompt: isAr ? "صياغة قرار جديد للمناطق الاستثمارية." : "Draft a new decree for investment zones." },
+                  { icon: Search, title: isAr ? "النصوص الحاكمة" : "Governing Texts", desc: isAr ? "البحث عن النصوص الحاكمة للاستفسار" : "Search for governing legal texts", prompt: isAr ? "ما هي النصوص القانونية الحاكمة للاستفسار التالي: " : "What are the governing legal texts for the following inquiry: " },
                   { icon: Network, title: isAr ? "الروابط القانونية" : "Legal Relationships", desc: isAr ? "خارطة التشريعات والمعاهدات" : "Map legislation & treaties", prompt: isAr ? "تحليل الروابط القانونية لهذا النص مع التشريعات والمعاهدات الدولية." : "Analyze legal relationships of this text with legislation and international treaties." },
                   { icon: Sparkles, title: isAr ? "تحليل قضائي" : "Judicial Analysis", desc: isAr ? "تلخيص أحكام وتحديد ثغرات" : "Summarize rulings & identify gaps", prompt: isAr ? "لخص هذا الحكم في مذكرة قانونية." : "Summarize this judicial ruling into a memo." },
                   { icon: FileDown, title: isAr ? "خطاب رسمي/قانوني" : "Formal/Legal Letter", desc: isAr ? "صياغة خطابات رسمية أو قانونية" : "Draft formal or legal correspondence", prompt: isAr ? "إعداد خطاب رسمي موجه إلى..." : "Draft a formal letter addressed to..." },

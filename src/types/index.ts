@@ -14,6 +14,8 @@ export type LegalWorkflow =
   | 'Translation'
   | 'Forms'
   | 'Library'
+  | 'History'
+  | 'ProvisionSearch'
   | 'Summarization'
   | 'Relationships'
   | 'Admin';

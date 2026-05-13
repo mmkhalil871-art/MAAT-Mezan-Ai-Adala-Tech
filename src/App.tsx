@@ -148,6 +148,18 @@ export default function App() {
       };
 
       setMessages(prev => [...prev.filter(m => m.role !== 'system'), userMessage, assistantMessage]);
+
+      // Save to chat history if user is logged in
+      if (user?.email) {
+        import('./lib/firebase').then(({ saveChatHistory }) => {
+          saveChatHistory({
+            userEmail: user.email!,
+            userMessage: content,
+            aiResponse: aiResponse,
+            workflow: workflow
+          }).catch(err => console.error('Failed to auto-save history:', err));
+        });
+      }
     } catch (error: unknown) {
       console.error('Legal AI Error:', error);
       const errorDetail = (error as Error)?.message || "Unknown connectivity issue.";
@@ -213,6 +225,13 @@ export default function App() {
       if (pendingContent) {
         await processLegalTask(pendingContent.content, pendingContent.files, workflow);
         setPendingContent(null);
+      } else {
+        // If triggered as an outcome action without pending content, 
+        // use the last user message as the basis for the new workflow task
+        const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+        if (lastUserMsg) {
+          await processLegalTask(lastUserMsg.content, undefined, workflow);
+        }
       }
     } else if (action.type === 'output') {
       if (action.value === 'save') {
@@ -229,7 +248,7 @@ export default function App() {
          await processLegalTask(`Generate an implementation Action Plan for the previous legal outcome.`, undefined, 'Forms');
       }
     }
-  }, [pendingContent, processLegalTask, handleSaveToLibrary]);
+  }, [pendingContent, processLegalTask, handleSaveToLibrary, messages]);
 
   const handleTranslateMessage = useCallback(async (content: string, targetLang: Language) => {
     setIsLoading(true);
@@ -359,6 +378,18 @@ export default function App() {
               ) : currentWorkflow === 'Library' ? (
                 <LibraryPanel 
                   language={language} 
+                />
+              ) : currentWorkflow === 'History' ? (
+                <HistoryPanel 
+                  language={language} 
+                  onClose={() => setCurrentWorkflow('General')}
+                  onReuse={(details) => {
+                    if (details.userMessage) {
+                      handleSendMessage(details.userMessage as string);
+                      setCurrentWorkflow('General');
+                    }
+                  }}
+                  isFullPage
                 />
               ) : (
                 <ChatArea 
