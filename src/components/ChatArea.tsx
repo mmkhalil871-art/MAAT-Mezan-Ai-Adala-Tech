@@ -65,20 +65,7 @@ interface ChatAreaProps {
   userEmail?: string | null;
 }
 
-const formTypes: FormType[] = [
-  'Contract',
-  'Decree',
-  'Official Notice',
-  'Power of Attorney',
-  'Administrative Decision',
-  'Info Paper',
-  'Policy Paper',
-  'Action Plan',
-  'Reply for Formal Entities',
-  'Regulation',
-  'Legal Memo',
-  'Legal Opinion'
-];
+// Form types are now handled inside the component to support filtering by persona
 
 export default function ChatArea({ 
   messages, 
@@ -182,6 +169,31 @@ export default function ChatArea({
     sync: isAr ? 'متصل بالقاعدة القانونية' : 'Legal Base Synced'
   };
 
+  const rawFormTypes: FormType[] = [
+    'Contract',
+    'Decree',
+    'Official Notice',
+    'Power of Attorney',
+    'Administrative Decision',
+    'Info Paper',
+    'Policy Paper',
+    'Action Plan',
+    'Reply for Formal Entities',
+    'Regulation',
+    'Legal Memo',
+    'Legal Opinion',
+    'Judgment Summary',
+    'Speech',
+    'Statement'
+  ];
+
+  const availableFormTypes = rawFormTypes.filter(type => {
+    if (type === 'Speech' || type === 'Statement') {
+      return activePersona === 'Administrator';
+    }
+    return true;
+  });
+
   return (
     <div className={cn(
       "flex flex-col h-full bg-bg-soft relative transition-all duration-700",
@@ -241,40 +253,40 @@ export default function ChatArea({
         className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-12 py-6 sm:py-8 pb-2 scrollbar-prominent print:p-8"
       >
         {messages.length === 0 && (
-          <div className="max-w-5xl mx-auto h-full flex flex-col pt-0 md:pt-2">
-            <div className="flex-1 overflow-y-auto scrollbar-prominent pr-2 space-y-6 sm:space-y-8">
-              <div className="w-full grid grid-cols-2 md:grid-cols-3 gap-2">
-                <div className="p-2 sm:p-3 bg-transparent border-none theme-radius flex flex-col gap-0.5">
-                  <span className="text-[8px] sm:text-[9px] caps text-gold-start/60">{isAr ? 'حالة النظام' : 'System Status'}</span>
+          <div className="w-full max-w-7xl mx-auto flex flex-col pt-0 md:pt-4">
+            <div className="space-y-8 sm:space-y-12">
+              <div className="w-full grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="p-3 sm:p-5 bg-bg-sidebar/30 border border-border-subtle/30 theme-radius flex flex-col gap-1">
+                  <span className="text-[10px] sm:text-[11px] caps text-gold-start/60">{isAr ? 'حالة النظام' : 'System Status'}</span>
                   <div className="flex items-center gap-1.5 md:gap-2">
-                    <div className="w-1 md:w-1.5 h-1 md:h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[10px] md:text-xs font-medium">{isAr ? 'العقدة الوزارية نشطة' : 'Ministerial Node Active'}</span>
+                    <div className="w-1.5 md:w-2 h-1.5 md:h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-xs md:text-sm font-medium">{isAr ? 'العقدة الوزارية نشطة' : 'Ministerial Node Active'}</span>
                   </div>
                 </div>
-                <div className="p-2 sm:p-3 bg-transparent border-none theme-radius flex flex-col gap-0.5">
-                  <span className="text-[8px] sm:text-[9px] caps text-gold-start/60">{isAr ? 'قاعدة البيانات القانونية' : 'Legal Database'}</span>
-                  <span className="text-[10px] md:text-xs font-medium">{isAr ? 'تمت مزامنة القاعدة السيادية' : 'Sovereign Base Synced'}</span>
+                <div className="p-3 sm:p-5 bg-bg-sidebar/30 border border-border-subtle/30 theme-radius flex flex-col gap-1">
+                  <span className="text-[10px] sm:text-[11px] caps text-gold-start/60">{isAr ? 'قاعدة البيانات القانونية' : 'Legal Database'}</span>
+                  <span className="text-xs md:text-sm font-medium">{isAr ? 'تمت مزامنة القاعدة السيادية' : 'Sovereign Base Synced'}</span>
                 </div>
-                <div className="p-2 sm:p-3 bg-transparent border-none theme-radius flex flex-col gap-0.5 hidden md:flex">
-                  <span className="text-[8px] sm:text-[9px] caps text-gold-start/60">{isAr ? 'مجمع المعالجة' : 'Processing Pool'}</span>
-                  <span className="text-[10px] md:text-xs font-medium">{isAr ? '99.9% معدل النزاهة' : '99.9% Integrity Rate'}</span>
+                <div className="p-3 sm:p-5 bg-bg-sidebar/30 border border-border-subtle/30 theme-radius flex flex-col gap-1 hidden md:flex">
+                  <span className="text-[10px] sm:text-[11px] caps text-gold-start/60">{isAr ? 'مجمع المعالجة' : 'Processing Pool'}</span>
+                  <span className="text-xs md:text-sm font-medium">{isAr ? '99.9% معدل النزاهة' : '99.9% Integrity Rate'}</span>
                 </div>
               </div>
 
-              <div className="text-center flex flex-col items-center">
-                <div className="w-[clamp(8rem,25vw,16rem)] aspect-square flex items-center justify-center mb-6 bg-transparent shrink-0">
-                  <img src="/logo.png" alt="MAAT Logo" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+              <div className="text-center flex flex-col items-center py-8">
+                <div className="w-[clamp(10rem,30vw,20rem)] aspect-square flex items-center justify-center mb-8 bg-transparent shrink-0">
+                  <img src="/logo.png" alt="MAAT Logo" className="w-full h-full object-contain scale-110" referrerPolicy="no-referrer" />
                 </div>
-                <h2 className="text-2xl md:text-3xl lg:text-4xl font-semibold font-serif text-text-main mb-2 tracking-tight leading-tight">
+                <h2 className="text-3xl md:text-4xl lg:text-5xl font-semibold font-serif text-text-main mb-4 tracking-tight leading-tight">
                   {translations.welcome}
                 </h2>
-                <p className="text-xs md:text-base text-text-muted/60 font-sans tracking-wide max-w-xl leading-relaxed opacity-80">
+                <p className="text-sm md:text-lg lg:text-xl text-text-muted/70 font-sans tracking-wide max-w-2xl mx-auto leading-relaxed opacity-90">
                   {translations.description}
                 </p>
               </div>
 
               {/* Persona Tabs Block */}
-              <div className="w-full max-w-5xl mx-auto p-4 md:p-6 bg-transparent flex flex-col items-center gap-4 md:gap-6 relative group">
+              <div className="w-full p-6 md:p-10 bg-bg-sidebar/20 border border-border-subtle/20 theme-radius flex flex-col items-center gap-6 md:gap-8 relative group">
                 <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gold-gradient opacity-10" />
                 
                 <div className="flex flex-col items-center gap-3 relative z-10">
@@ -289,9 +301,21 @@ export default function ChatArea({
                     <Sparkles className="w-4 md:w-5 h-4 md:h-5 text-gold-start animate-pulse" />
                     {isAr ? 'أنت الآن تعمل بصفتك:' : 'Now you are acting as:'}
                   </h3>
+                  
+                  {/* Added description of active persona */}
+                  {RESEARCHER_ROLES.find(r => r.id === activePersona) && (
+                    <motion.p 
+                      key={activePersona}
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 0.6, y: 0 }}
+                      className="text-[10px] md:text-xs text-center max-w-xl text-text-muted italic px-4"
+                    >
+                      {isAr ? RESEARCHER_ROLES.find(r => r.id === activePersona)?.descriptionAr : RESEARCHER_ROLES.find(r => r.id === activePersona)?.description}
+                    </motion.p>
+                  )}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3 relative z-10">
+                <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3 relative z-10 w-full">
                   {RESEARCHER_ROLES.filter(role => role.id !== 'Administrator' || userEmail === 'm.mkhalil871@gmail.com').map((role) => {
                     const icons: Record<string, React.ElementType> = { 
                       Scale, 
@@ -309,27 +333,41 @@ export default function ChatArea({
                       ShieldAlert
                     };
                     const Icon = icons[role.icon];
+                    const isActive = activePersona === role.id;
+                    
                     return (
-                      <button
-                        key={role.id}
-                        onClick={() => onPersonaChange(role.id as ResearcherRole)}
-                        className={cn(
-                          "flex items-center gap-2 md:gap-4 px-3 md:px-5 py-2 md:py-3 theme-radius transition-all text-[10px] md:text-xs font-bold caps whitespace-nowrap border shadow-sm hover:shadow-xl group/btn active:scale-95",
-                          activePersona === role.id 
-                            ? (theme === 'dark' ? "bg-gold-start/20 text-gold-start border-gold-start/40 shadow-gold-start/10" : "bg-primary-action text-white border-primary-action") 
-                            : "bg-bg-deep/40 text-text-muted border-border-subtle/40 hover:text-text-main hover:bg-bg-sidebar/60 hover:border-gold-start/30"
-                        )}
-                      >
+                      <div key={role.id} className="relative group/role-container">
+                        <button
+                          onClick={() => onPersonaChange(role.id as ResearcherRole)}
+                          className={cn(
+                            "flex items-center gap-2 md:gap-4 px-3 md:px-5 py-2 md:py-3 theme-radius transition-all text-[10px] md:text-xs font-bold caps whitespace-nowrap border shadow-sm hover:shadow-xl active:scale-95",
+                            isActive 
+                              ? (theme === 'dark' ? "bg-gold-start/20 text-gold-start border-gold-start/40 shadow-gold-start/10" : "bg-primary-action text-white border-primary-action") 
+                              : "bg-bg-deep/40 text-text-muted border-border-subtle/40 hover:text-text-main hover:bg-bg-sidebar/60 hover:border-gold-start/30"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-6 h-6 md:w-8 md:h-8 rounded-lg flex items-center justify-center transition-all duration-500",
+                            isActive 
+                              ? "bg-gold-start/20" 
+                              : "bg-bg-sidebar/40 group-hover/role-container:bg-gold-start/10"
+                          )}>
+                            {Icon && <Icon className={cn("w-3.5 h-3.5 md:w-4 md:h-4 transition-transform duration-500 group-hover/role-container:scale-110", isActive ? "scale-110 text-gold-start" : "opacity-40")} />}
+                          </div>
+                          <span className="tracking-[0.1em]">{isAr ? role.labelAr : role.label}</span>
+                        </button>
+                        
+                        {/* Hover Description Tooltip */}
                         <div className={cn(
-                          "w-6 h-6 md:w-8 md:h-8 rounded-lg flex items-center justify-center transition-all duration-500",
-                          activePersona === role.id 
-                            ? "bg-gold-start/20" 
-                            : "bg-bg-sidebar/40 group-hover/btn:bg-gold-start/10"
+                          "absolute bottom-full mb-3 left-1/2 -translate-x-1/2 w-64 p-3 bg-bg-deep border border-gold-start/30 theme-radius shadow-2xl z-50 pointer-events-none opacity-0 group-hover/role-container:opacity-100 transition-all duration-300 transform scale-90 group-hover/role-container:scale-100",
+                          isAr ? "text-right" : "text-left"
                         )}>
-                          {Icon && <Icon className={cn("w-3.5 h-3.5 md:w-4 md:h-4 transition-transform duration-500 group-hover/btn:scale-110", activePersona === role.id ? "scale-110 text-gold-start" : "opacity-40")} />}
+                          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 rotate-45 w-2 h-2 bg-bg-deep border-b border-r border-gold-start/30" />
+                          <p className="text-[10px] md:text-xs font-sans text-text-main leading-relaxed">
+                            {isAr ? role.descriptionAr : role.description}
+                          </p>
                         </div>
-                        <span className="tracking-[0.1em]">{isAr ? role.labelAr : role.label}</span>
-                      </button>
+                      </div>
                     )
                   })}
                 </div>
@@ -506,7 +544,12 @@ export default function ChatArea({
                   "flex flex-wrap gap-2 w-full pt-4",
                   message.role === 'user' ? "justify-end" : "justify-start"
                 )}>
-                  {message.actions.map(action => (
+                  {message.actions.filter(action => {
+                    if (action.formType === 'Speech' || action.formType === 'Statement') {
+                      return activePersona === 'Administrator';
+                    }
+                    return true;
+                  }).map(action => (
                     <motion.button
                       key={action.id}
                       whileHover={{ scale: 1.02 }}
@@ -560,7 +603,7 @@ export default function ChatArea({
               "absolute -top-16 inset-x-0 flex bg-bg-deep/80 backdrop-blur-md border border-border-subtle p-1.5 z-30 transition-all overflow-x-auto no-scrollbar gap-1 theme-radius flex-nowrap",
               "flex-row"
             )}>
-              {formTypes.map(type => (
+              {availableFormTypes.map(type => (
                 <button
                   key={type}
                   type="button"

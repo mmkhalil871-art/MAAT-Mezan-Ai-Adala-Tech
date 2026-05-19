@@ -80,7 +80,10 @@ export default function AdminPanel() {
               <ShieldCheck className="w-5 h-5 text-gold-start" />
               <h1 className="text-xl font-serif text-text-main">Administrative Control Tower</h1>
             </div>
-            <p className="text-[10px] text-text-muted font-bold caps tracking-[0.3em] opacity-50">Sovereign System Intelligence</p>
+            <p className="text-[10px] text-text-muted font-bold caps tracking-[0.3em] opacity-50 mb-2">Sovereign System Intelligence</p>
+            <p className="text-[9px] text-text-muted/60 max-w-md leading-relaxed italic">
+              Centralized oversight of all sovereign system activities, including user audit logs and administrative inbound requests for policy clearance.
+            </p>
           </div>
           <div className="flex items-center gap-1 bg-bg-sidebar/40 p-1 border border-border-subtle rounded-sm">
             <button 

@@ -52,7 +52,9 @@ export type FormType =
   | 'Regulation'
   | 'Legal Memo'
   | 'Legal Opinion'
-  | 'Judgment Summary';
+  | 'Judgment Summary'
+  | 'Speech'
+  | 'Statement';
 
 export interface MessageAction {
   id: string;
@@ -60,6 +62,7 @@ export interface MessageAction {
   labelAr: string;
   type: 'workflow' | 'output' | 'system';
   value: string;
+  formType?: FormType;
 }
 
 export interface Message {

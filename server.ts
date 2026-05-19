@@ -38,15 +38,16 @@ async function startServer() {
     res.setHeader('Transfer-Encoding', 'chunked');
 
     try {
+      const isHighThinking = highThinking === true;
       const response = await ai.models.generateContentStream({
-        model: "gemini-3-flash-preview",
+        model: isHighThinking ? "gemini-3-flash-preview" : "gemini-3.1-flash-lite",
         contents,
         config: {
           systemInstruction,
-          temperature: highThinking ? 0.4 : 0.2, // Slightly higher for "high thinking" tasks
-          thinkingConfig: {
-            thinkingLevel: highThinking ? ThinkingLevel.HIGH : ThinkingLevel.LOW
-          },
+          temperature: isHighThinking ? 0.7 : 0.2, 
+          thinkingConfig: isHighThinking ? {
+            thinkingLevel: ThinkingLevel.HIGH
+          } : undefined,
           tools: enableSearch ? [{ googleSearch: {} }] : undefined,
         }
       });
@@ -115,7 +116,7 @@ async function startServer() {
       }
 
       const result = await ai.models.generateContent({
-        model: "gemini-flash-latest",
+        model: "gemini-3.1-flash-lite",
         contents: prompt
       });
       
@@ -156,7 +157,7 @@ async function startServer() {
       }
 
       const result = await ai.models.generateContent({
-        model: "gemini-flash-latest",
+        model: "gemini-3.1-flash-lite",
         contents: prompt
       });
       

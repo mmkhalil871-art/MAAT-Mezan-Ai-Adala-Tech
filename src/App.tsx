@@ -249,6 +249,9 @@ export default function App() {
     if (action.type === 'workflow') {
       const workflow = action.value as LegalWorkflow;
       setCurrentWorkflow(workflow);
+      if (action.formType) {
+        setFormType(action.formType);
+      }
       if (pendingContent) {
         await processLegalTask(pendingContent.content, pendingContent.files, workflow);
         setPendingContent(null);
@@ -522,8 +525,8 @@ export default function App() {
           whileTap={{ scale: 0.9 }}
           onClick={() => setShowVoice(true)}
           className={cn(
-            "fixed bottom-6 z-40 w-14 h-14 rounded-full bg-gold-gradient shadow-2xl flex items-center justify-center text-white transition-all",
-            isAr ? "left-6" : "right-6"
+            "fixed bottom-8 z-40 w-14 h-14 rounded-full bg-gold-gradient shadow-2xl flex items-center justify-center text-white transition-all",
+            isAr ? "left-2" : "right-24"
           )}
         >
           <Mic className="w-6 h-6" />

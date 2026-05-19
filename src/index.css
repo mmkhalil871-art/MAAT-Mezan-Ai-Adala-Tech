@@ -21,9 +21,9 @@
   --color-border-subtle: #23272E;
   --color-primary-action: #D4AF37;
 
-  /* Constrained Width for Professionals */
-  --max-content-width: 95%;
-  --max-message-width: 90%;
+  /* Immersive Width for Professionals */
+  --max-content-width: 100%;
+  --max-message-width: 98%;
 
   /* Lite Mode Palette (Professional & Sovereign) */
   --color-lite-sidebar: #F8FAFC;
