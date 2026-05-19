@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { LogIn, Sun, Moon, Scale, ShieldAlert } from 'lucide-react';
+import { LogIn, Sun, Moon, ShieldAlert, Sparkles, FileSearch, ShieldCheck, Globe } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { signInWithGoogle } from '../lib/firebase';
@@ -73,7 +73,7 @@ export default function LoginPage({ onLogin, onGuestAccess, isAr, theme, onTheme
 
   return (
     <div 
-      className="min-h-[100dvh] w-full bg-bg-deep flex flex-col items-center justify-center p-[clamp(0.5rem,3vh,2rem)] relative overflow-y-auto overflow-x-hidden antialiased transition-colors duration-700" 
+      className="min-h-screen w-full bg-bg-deep flex flex-col items-center justify-start p-[clamp(1rem,5vh,3rem)] relative antialiased transition-colors duration-700 overflow-x-hidden overflow-y-auto" 
       dir={isAr ? 'rtl' : 'ltr'}
     >
       {/* Background Decor */}
@@ -93,9 +93,9 @@ export default function LoginPage({ onLogin, onGuestAccess, isAr, theme, onTheme
         animate={{ opacity: 1, y: 0, rotateX: 0 }}
         transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
         className={cn(
-          "w-[clamp(340px,94%,600px)] portrait:w-[94%] landscape:w-[clamp(360px,85%,580px)] border-2 relative z-10 theme-radius transition-all duration-700 my-auto flex flex-col max-h-[94dvh] min-h-[min(760px,94dvh)]",
-          "p-[clamp(1.75rem,6vh,4rem)]",
-          theme === 'dark' ? "bg-bg-soft border-gold-start/20 shadow-[0_0_120px_rgba(0,0,0,0.8)]" : "bg-white border-lite-border shadow-[0_50px_140px_rgba(27,54,93,0.25)]"
+          "w-[clamp(340px,94%,640px)] portrait:w-[94%] landscape:w-[clamp(360px,85%,620px)] border-2 relative z-10 theme-radius transition-all duration-700 my-10 flex flex-col h-auto",
+          "p-[clamp(1.5rem,7vh,4rem)]",
+          theme === 'dark' ? "bg-bg-soft border-gold-start/20 shadow-[0_0_150px_rgba(0,0,0,0.8)]" : "bg-white border-lite-border shadow-[0_50px_140px_rgba(27,54,93,0.25)]"
         )}
       >
         <div className="flex flex-col items-center text-center w-full flex-shrink-0">
@@ -147,18 +147,28 @@ export default function LoginPage({ onLogin, onGuestAccess, isAr, theme, onTheme
           </div>
 
           <motion.div 
-            whileHover={{ scale: 1.05 }}
+            whileHover={{ scale: 1.02 }}
             className={cn(
-              "flex flex-col items-center justify-center transition-all duration-700 aspect-square",
-              "w-[clamp(4rem,12vh,5.5rem)]",
-              theme === 'dark' ? "bg-gold-start/10 border-2 border-gold-start/20 logo-3d theme-radius mb-[clamp(1rem,3vh,1.5rem)]" : "bg-lite-accent shadow-2xl shadow-[#1B365D]/30 theme-radius mb-[clamp(1rem,3vh,1.5rem)]"
+              "flex flex-col items-center justify-center transition-all duration-700 mb-[clamp(0.5rem,2vh,1rem)] relative group",
+              "w-[clamp(12rem,40vh,20rem)] aspect-square"
             )}
           >
-            <Scale className={cn("w-[45%] h-[45%] mb-1 relative z-10", theme === 'dark' ? "text-gold-start" : "text-white")} />
+            {/* Dynamic Background Glow behind logo */}
+            <div className={cn(
+              "absolute inset-[5%] rounded-full blur-[60px] opacity-20 group-hover:opacity-30 transition-all duration-1000",
+              theme === 'dark' ? "bg-gold-start" : "bg-lite-accent"
+            )} />
+            
+            <img 
+              src="/logo.png" 
+              alt="MAAT Logo" 
+              className="w-full h-full object-contain relative z-10 scale-[1.15]" 
+              referrerPolicy="no-referrer" 
+            />
           </motion.div>
           
-          <div className="mb-[clamp(1rem,4vh,2rem)] w-full">
-            <h1 className="text-[clamp(1.5rem,4vw,2.4rem)] font-serif text-text-main mb-[clamp(0.25rem,1vh,0.75rem)] tracking-tight text-gold-gradient font-bold leading-tight">
+          <div className="mb-[clamp(0.25rem,1vh,0.75rem)] w-full">
+            <h1 className="text-[clamp(1.5rem,4vw,2.4rem)] font-serif text-text-main mb-[clamp(0.2rem,0.5vh,0.5rem)] tracking-tight text-gold-gradient font-bold leading-tight">
               {content.title}
             </h1>
             <div className="flex flex-col items-center gap-1 px-[5%]">
@@ -172,19 +182,34 @@ export default function LoginPage({ onLogin, onGuestAccess, isAr, theme, onTheme
           </div>
         </div>
 
-        <div className="space-y-[clamp(1rem,3vh,2rem)] w-full overflow-y-auto custom-scrollbar pr-1 flex-1 min-h-0">
+        <div className="space-y-[clamp(1rem,3vh,2rem)] w-full pr-1">
           <div className="text-center max-w-[min(94%,450px)] mx-auto pt-2">
             <p className="text-[clamp(14px,1.6vw,17px)] text-text-muted leading-relaxed font-sans font-medium">
               {content.description}
             </p>
           </div>
 
-          <div className="flex flex-col gap-[clamp(1rem,3vh,1.5rem)] w-full max-w-[460px] mx-auto">
+          {/* Quick Features List - Addressing "do this features" */}
+          <div className="grid grid-cols-2 gap-3 max-w-[520px] mx-auto py-4 border-t border-b border-border-subtle/20">
+            {[
+              { icon: Sparkles, label: isAr ? 'مستشار ذكي' : 'AI Advisor' },
+              { icon: FileSearch, label: isAr ? 'تحليل الأحكام' : 'Judgment Analysis' },
+              { icon: ShieldCheck, label: isAr ? 'سيادة قانونية' : 'Legal Sovereignty' },
+              { icon: Globe, label: isAr ? 'مواثيق دولية' : 'Global Treaties' }
+            ].map((f, i) => (
+              <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gold-start/5 border border-gold-start/10">
+                <f.icon className="w-3.5 h-3.5 text-gold-start shrink-0" />
+                <span className="text-[10px] font-black caps tracking-wider truncate">{f.label}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-[clamp(1.25rem,4vh,2rem)] w-full max-w-[480px] mx-auto mt-6">
             <button
               onClick={handleLogin}
               disabled={isLoggingIn}
               className={cn(
-                "w-full py-[clamp(1rem,2vh,1.4rem)] px-10 font-bold text-[clamp(13px,1.5vw,16px)] uppercase tracking-[0.12em] transition-all flex items-center justify-center gap-4 active:scale-[0.98] disabled:opacity-50 theme-radius shadow-xl relative group overflow-hidden",
+                "w-full py-[clamp(1.25rem,2.5vh,1.75rem)] px-10 font-bold text-[clamp(14px,1.6vw,18px)] uppercase tracking-[0.15em] transition-all flex items-center justify-center gap-4 active:scale-[0.98] disabled:opacity-50 theme-radius shadow-2xl relative group overflow-hidden",
                 theme === 'dark' ? "bg-primary-action text-bg-deep" : "bg-lite-accent text-white hover:shadow-2xl hover:-translate-y-0.5"
               )}
             >
@@ -201,7 +226,7 @@ export default function LoginPage({ onLogin, onGuestAccess, isAr, theme, onTheme
             <button
               onClick={onGuestAccess}
               className={cn(
-                "w-full py-[clamp(1rem,2vh,1.4rem)] px-10 font-bold text-[clamp(13px,1.5vw,16px)] uppercase tracking-[0.12em] transition-all flex items-center justify-center gap-4 active:scale-[0.98] border-2 theme-radius group",
+                "w-full py-[clamp(1.25rem,2.5vh,1.75rem)] px-10 font-bold text-[clamp(14px,1.6vw,18px)] uppercase tracking-[0.15em] transition-all flex items-center justify-center gap-4 active:scale-[0.98] border-2 theme-radius group",
                 theme === 'dark' ? "border-gold-start/20 text-gold-start hover:bg-gold-start/5" : "border-lite-accent/20 text-lite-accent hover:bg-lite-accent/5 hover:border-lite-accent/40"
               )}
             >

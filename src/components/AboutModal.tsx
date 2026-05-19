@@ -4,7 +4,7 @@
  */
 
 import { motion } from 'motion/react';
-import { X, Info, Scale, Mail, Github, ExternalLink, Shield } from 'lucide-react';
+import { X, Info, Mail, Github, ExternalLink, Shield } from 'lucide-react';
 import { Language } from '../types';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -114,7 +114,9 @@ export default function AboutModal({ language, onClose, theme }: AboutModalProps
                   "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border",
                   theme === 'dark' ? "bg-bg-soft border-border-subtle" : "bg-lite-bg border-lite-border"
                 )}>
-                  <Scale className="w-4 h-4 text-gold-start" />
+                  <div className="w-5 h-5 rounded-full overflow-hidden border border-gold-start/20">
+                    <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  </div>
                   <span className="text-sm font-mono font-medium">{content.verNum}</span>
                 </div>
               </section>
@@ -158,10 +160,12 @@ export default function AboutModal({ language, onClose, theme }: AboutModalProps
             <p className="text-[9px] caps font-bold text-text-muted/40 tracking-[0.5em] mb-4">
               {isAr ? 'نظام ماعت الفقهي' : 'MAAT JURISPRUDENCE SYSTEM'}
             </p>
-            <div className="flex items-center gap-4 opacity-20">
+            <div className="flex items-center gap-4 opacity-40">
               <div className="w-1 h-1 rounded-full bg-white" />
               <div className="w-1 h-1 rounded-full bg-white" />
-              <Scale className="w-4 h-4" />
+              <div className="w-16 h-16 rounded-full overflow-hidden border border-gold-start/30">
+                <img src="/logo.png" alt="MAAT" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              </div>
               <div className="w-1 h-1 rounded-full bg-white" />
               <div className="w-1 h-1 rounded-full bg-white" />
             </div>

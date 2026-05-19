@@ -1,6 +1,6 @@
 {
-  "name": "Remix: MAAT - Mezan Ai Adala Tech Sovereign Legal Intelligent Assistant",
-  "description": "An advanced legal platform specialized in Egyptian and international law for drafting, analyzing, and interpreting regulatory texts.",
-  "requestFramePermissions": [],
-  "majorCapabilities": []
+  "name": "MAAT - Legal AI Advisor",
+  "description": "An advanced AI-powered legal sovereign assistant for drafting, analyzing, and interpreting regulatory texts and international law.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

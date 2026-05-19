@@ -63,6 +63,19 @@
         "status": { "type": "string", "enum": ["pending", "viewed", "archived"], "description": "Current status of the request." }
       },
       "required": ["userEmail", "requestType", "message", "timestamp", "status"]
+    },
+    "ChatHistoryItem": {
+      "title": "Chat History Item",
+      "description": "Record of a user query and the AI response.",
+      "type": "object",
+      "properties": {
+        "userEmail": { "type": "string", "description": "User who asked the question." },
+        "userMessage": { "type": "string", "description": "The prompt or question." },
+        "aiResponse": { "type": "string", "description": "The legal advisor response." },
+        "workflow": { "type": "string", "description": "The context/workflow used." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When it was recorded." }
+      },
+      "required": ["userEmail", "userMessage", "aiResponse", "timestamp", "workflow"]
     }
   },
   "firestore": {
@@ -85,6 +98,10 @@
     "admin_requests/{requestId}": {
       "schema": "AdminRequest",
       "description": "User messages and requests for admin action."
+    },
+    "chat_history/{historyId}": {
+      "schema": "ChatHistoryItem",
+      "description": "Personal legal consultation history."
     }
   }
 }

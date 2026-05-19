@@ -1,13 +1,19 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel, LiveServerMessage, Modality } from "@google/genai";
 import dotenv from "dotenv";
+import { WebSocketServer } from "ws";
 
 dotenv.config();
 
 const ai = new GoogleGenAI({ 
-  apiKey: (process.env.GEMINI_API_KEY || '').trim() 
+  apiKey: (process.env.GEMINI_API_KEY || '').trim(),
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
 });
 
 if (!process.env.GEMINI_API_KEY) {
@@ -20,7 +26,47 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+
+  // API Route for Streaming Chat
+  app.post("/api/chat-stream", async (req, res) => {
+    const { contents, systemInstruction, enableSearch, highThinking } = req.body;
+    
+    if (!contents) return res.status(400).json({ error: "Contents are required" });
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Transfer-Encoding', 'chunked');
+
+    try {
+      const response = await ai.models.generateContentStream({
+        model: "gemini-3-flash-preview",
+        contents,
+        config: {
+          systemInstruction,
+          temperature: highThinking ? 0.4 : 0.2, // Slightly higher for "high thinking" tasks
+          thinkingConfig: {
+            thinkingLevel: highThinking ? ThinkingLevel.HIGH : ThinkingLevel.LOW
+          },
+          tools: enableSearch ? [{ googleSearch: {} }] : undefined,
+        }
+      });
+
+      for await (const chunk of response) {
+        if (chunk.text) {
+          res.write(chunk.text);
+        }
+        
+        // If there is grounding metadata, we might want to send it too, 
+        // but for simple text streaming, we just send the text.
+        // In a more complex app, we could use a custom separator or JSON chunks.
+      }
+      res.end();
+    } catch (error) {
+      console.error("Streaming Chat Error:", error);
+      res.write(`\n\n[ERROR: ${error instanceof Error ? error.message : String(error)}]`);
+      res.end();
+    }
+  });
 
   // API Route for URL Analysis
   app.post("/api/analyze-url", async (req, res) => {
@@ -142,8 +188,77 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Legal Intelligence Server running on http://localhost:${PORT}`);
+  });
+
+  const wss = new WebSocketServer({ server, path: '/api/live' });
+
+  wss.on("connection", async (clientWs) => {
+    console.log("Live conversation started via WebSocket");
+    
+    try {
+      const session = await ai.live.connect({
+        model: "gemini-3.1-flash-live-preview",
+        callbacks: {
+          onmessage: (message: LiveServerMessage) => {
+            // Forward audio from Gemini to client
+            const parts = message.serverContent?.modelTurn?.parts;
+            if (parts && parts.length > 0) {
+              const audio = parts[0]?.inlineData?.data;
+              if (audio) {
+                clientWs.send(JSON.stringify({ type: 'audio', data: audio }));
+              }
+              
+              const text = parts[0]?.text;
+              if (text) {
+                clientWs.send(JSON.stringify({ type: 'text', data: text }));
+              }
+            }
+
+            if (message.serverContent?.interrupted) {
+              clientWs.send(JSON.stringify({ type: 'interrupted' }));
+            }
+          },
+        },
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
+          },
+          systemInstruction: "You are MAAT, the Sovereign Legal Intelligent Assistant. You are specialized in Egyptian law and international conventions. Communicate with high legal authority and professional poise. Use professional legal terminology. Respond in the same language the user uses. Your goal is to provide immediate, low-latency legal advice via voice.",
+          outputAudioTranscription: {},
+          inputAudioTranscription: {},
+        },
+      });
+
+      clientWs.on("message", (data) => {
+        try {
+          const msg = JSON.parse(data.toString());
+          if (msg.audio) {
+            session.sendRealtimeInput({
+              audio: { data: msg.audio, mimeType: "audio/pcm;rate=16000" },
+            });
+          }
+          if (msg.text) {
+            session.sendRealtimeInput({
+              text: msg.text
+            });
+          }
+        } catch (e) {
+          console.error("WebSocket message parsing error:", e);
+        }
+      });
+
+      clientWs.on("close", () => {
+        console.log("Live conversation closed");
+      });
+
+    } catch (error) {
+      console.error("Gemini Live Connection Error:", error);
+      clientWs.send(JSON.stringify({ type: 'error', message: "Jurisprudence engine failed to establish live link." }));
+      clientWs.close();
+    }
   });
 }
 

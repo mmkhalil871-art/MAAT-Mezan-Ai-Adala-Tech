@@ -16,11 +16,28 @@ export type LegalWorkflow =
   | 'Library'
   | 'History'
   | 'ProvisionSearch'
+  | 'RelatedInstruments'
   | 'Summarization'
   | 'Relationships'
   | 'Admin';
 
 export type Language = 'en' | 'ar';
+
+export type ResearcherRole = 
+  | 'LegalResearcher'
+  | 'TechnicalResearcher'
+  | 'ILS'
+  | 'LegalAffairs'
+  | 'PoliticalEconomical'
+  | 'LegalInterpreter'
+  | 'LabourJudge'
+  | 'LabourAttache'
+  | 'LabourCounselor'
+  | 'CEACR'
+  | 'SpecialRapporteur'
+  | 'LegalAIConsultant'
+  | 'ProfessionalLabourLawyer'
+  | 'Administrator';
 
 export type FormType = 
   | 'Contract'

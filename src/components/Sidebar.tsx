@@ -6,6 +6,8 @@
 import { 
   Scale, 
   Search, 
+  Sparkles,
+  Network,
   FileCode, 
   Globe, 
   Plus,
@@ -17,6 +19,7 @@ import {
   Library,
   ShieldCheck,
   LogOut,
+  HelpCircle,
   History,
   Sun,
   Moon,
@@ -53,6 +56,7 @@ interface SidebarProps {
   onShowHistory: () => void;
   onShowMessages: () => void;
   onShowAbout: () => void;
+  onShowHowToUse: () => void;
   theme: 'dark' | 'light';
   onThemeToggle: () => void;
   fontScale: number;
@@ -62,7 +66,9 @@ interface SidebarProps {
 }
 
 const workflows: { id: LegalWorkflow; label: { en: string; ar: string }; icon: React.ElementType }[] = [
-  { id: 'General', label: { en: 'Advisor', ar: 'المستشار' }, icon: Search },
+  { id: 'General', label: { en: 'Advisor', ar: 'المستشار' }, icon: Sparkles },
+  { id: 'ProvisionSearch', label: { en: 'Provisions', ar: 'النصوص الحاكمة' }, icon: Search },
+  { id: 'RelatedInstruments', label: { en: 'Instruments', ar: 'المواثيق الدولية' }, icon: Network },
   { id: 'Drafting', label: { en: 'Draft Text', ar: 'صياغة نص' }, icon: FilePlus },
   { id: 'Regulation', label: { en: 'Regulation', ar: 'تشريع جديد' }, icon: FileText },
   { id: 'Analysis', label: { en: 'Analysis', ar: 'التحليل' }, icon: Scale },
@@ -70,6 +76,7 @@ const workflows: { id: LegalWorkflow; label: { en: string; ar: string }; icon: R
   { id: 'Library', label: { en: 'Library', ar: 'المكتبة' }, icon: Library },
   { id: 'History', label: { en: 'Q&A History', ar: 'سجل الأسئلة' }, icon: History },
   { id: 'Summarization', label: { en: 'Ruling Summary', ar: 'تلخيص الأحكام' }, icon: FileSearch },
+  { id: 'Relationships', label: { en: 'Relationships', ar: 'الروابط القانونية' }, icon: Network },
   { id: 'Forms', label: { en: 'Forms', ar: 'النماذج' }, icon: FileSignature },
   { id: 'Translation', label: { en: 'Translate', ar: 'الترجمة' }, icon: Languages },
   { id: 'Redrafting', label: { en: 'Refine', ar: 'التحسين' }, icon: FileCode },
@@ -88,6 +95,7 @@ export default function Sidebar({
   onShowHistory,
   onShowMessages,
   onShowAbout,
+  onShowHowToUse,
   theme,
   onThemeToggle,
   fontScale,
@@ -182,10 +190,9 @@ export default function Sidebar({
         <div className="absolute top-0 end-0 w-32 h-32 bg-gold-start/5 blur-3xl rounded-full -me-16 -mt-16 pointer-events-none" />
         <div className="flex items-center gap-4 mb-10 group cursor-default relative z-10">
           <div className={cn(
-            "w-14 h-14 flex items-center justify-center font-bold shadow-2xl theme-radius transition-all duration-700 shrink-0",
-            theme === 'dark' ? "text-bg-deep bg-gold-gradient logo-3d border border-gold-start/20" : "text-white shadow-2xl"
-          )} style={{ backgroundColor: activeColor }}>
-            <Scale className="w-8 h-8" />
+            "w-[clamp(5rem,15vh,7rem)] aspect-square flex items-center justify-center shrink-0 bg-transparent transition-all duration-700"
+          )}>
+            <img src="/logo.png" alt="MAAT Logo" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
           </div>
           <div className="flex flex-col">
             <h2 className={cn(
@@ -498,6 +505,24 @@ export default function Sidebar({
               {isAr ? 'تسجيل الدخول' : 'Sign In'}
             </button>
           )}
+
+          <button 
+            onClick={onShowHowToUse}
+            className={cn(
+              "w-full flex items-center gap-3 px-3 py-3 text-[12px] font-bold uppercase tracking-widest transition-all mb-2 border theme-radius group",
+              theme === 'dark' 
+                ? "text-gold-start bg-gold-start/5 border-gold-start/10 hover:bg-gold-start/10" 
+                : "bg-primary-action/5 text-primary-action border-primary-action/20 hover:bg-primary-action/10"
+            )}
+            style={{ 
+              color: theme === 'light' ? textColor : undefined,
+              backgroundColor: theme === 'light' ? `${textColor}08` : undefined,
+              borderColor: theme === 'light' ? `${textColor}15` : undefined
+            }}
+          >
+            <HelpCircle className="w-4 h-4 group-hover:scale-110 transition-transform" />
+            {isAr ? 'دليل الاستخدام' : 'User Manual'}
+          </button>
 
           <button 
             onClick={onLogout}

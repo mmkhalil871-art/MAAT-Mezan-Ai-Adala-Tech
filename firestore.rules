@@ -16,9 +16,10 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // Hardcoded admin email from runtime environment
+      // Hardcoded admin email and UID from runtime environment
       return isSignedIn() && (
         request.auth.token.email == 'm.mkhalil871@gmail.com' ||
+        request.auth.uid == 'ogajjlNzLTdoWBOhPgL2dF6VEBX2' ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
@@ -39,32 +40,32 @@ service cloud.firestore {
 
     function isValidLoginLog(data) {
       return data.keys().hasAll(['email', 'timestamp', 'userAgent', 'uid']) &&
-             data.keys().size() >= 4 && data.keys().size() <= 8 &&
+             data.keys().size() >= 4 && data.keys().size() <= 10 &&
              data.email is string && data.email.size() <= 256 &&
              data.uid is string && data.uid.size() <= 128 &&
-             data.userAgent is string && data.userAgent.size() <= 1024 &&
+             data.userAgent is string && data.userAgent.size() <= 2048 &&
              data.timestamp == request.time;
     }
 
     function isValidLibraryItem(data) {
       return data.keys().hasAll(['title', 'content', 'type', 'uploadedBy', 'timestamp', 'isPublic']) &&
              // Optional fields: fileName, url, relatedTo
-             data.keys().size() >= 6 && data.keys().size() <= 9 &&
-             data.title is string && data.title.size() > 0 && data.title.size() <= 500 &&
-             data.content is string && data.content.size() > 0 && data.content.size() <= 1000000 &&
+             data.keys().size() >= 6 && data.keys().size() <= 12 &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 1000 &&
+             data.content is string && data.content.size() > 0 && data.content.size() <= 5000000 &&
              data.type in ['law', 'regulation', 'decree', 'update', 'url', 'recommendation', 'convention', 'ministerial_decree', 'circular', 'procedure'] &&
              data.uploadedBy is string && data.uploadedBy.size() <= 256 &&
              data.timestamp == request.time &&
              data.isPublic is bool &&
-             (!('fileName' in data) || (data.fileName is string && data.fileName.size() <= 500)) &&
-             (!('url' in data) || (data.url is string && data.url.size() <= 2083)) &&
-             (!('relatedTo' in data) || (data.relatedTo is list && data.relatedTo.size() <= 50));
+             (!('fileName' in data) || (data.fileName is string && data.fileName.size() <= 1024)) &&
+             (!('url' in data) || (data.url is string && data.url.size() <= 3000)) &&
+             (!('relatedTo' in data) || (data.relatedTo is list && data.relatedTo.size() <= 100));
     }
 
     function isValidDepositionLog(data) {
       return data.keys().hasAll(['operation', 'email', 'timestamp', 'details']) &&
              // Optional path: itemId
-             data.keys().size() >= 4 && data.keys().size() <= 5 &&
+             data.keys().size() >= 4 && data.keys().size() <= 8 &&
              data.operation in ['create', 'update', 'delete', 'detect'] &&
              data.email is string && data.email.size() <= 256 &&
              data.timestamp == request.time &&
@@ -77,18 +78,18 @@ service cloud.firestore {
              data.keys().size() == 5 &&
              data.userEmail is string && data.userEmail.size() <= 256 &&
              data.requestType in ['add_document', 'other'] &&
-             data.message is string && data.message.size() > 0 && data.message.size() <= 5000 &&
+             data.message is string && data.message.size() > 0 && data.message.size() <= 10000 &&
              data.timestamp == request.time &&
              data.status in ['pending', 'viewed', 'archived'];
     }
 
     function isValidChatHistory(data) {
       return data.keys().hasAll(['userEmail', 'userMessage', 'aiResponse', 'timestamp', 'workflow']) &&
-             data.keys().size() == 5 &&
+             data.keys().size() >= 5 && data.keys().size() <= 8 &&
              data.userEmail is string && data.userEmail.size() <= 256 &&
-             data.userMessage is string && data.userMessage.size() <= 10000 &&
-             data.aiResponse is string && data.aiResponse.size() <= 100000 &&
-             data.workflow is string && data.workflow.size() <= 64 &&
+             data.userMessage is string && data.userMessage.size() <= 20000 &&
+             data.aiResponse is string && data.aiResponse.size() <= 200000 &&
+             data.workflow is string && data.workflow.size() <= 128 &&
              data.timestamp == request.time;
     }
 
@@ -102,7 +103,7 @@ service cloud.firestore {
         incoming().email == request.auth.token.email &&
         incoming().uid == request.auth.uid;
       
-      allow list: if isAdmin() && resource.data.email != null; 
+      allow list: if isAdmin(); 
       allow get: if isAdmin() && isValidId(logId);
     }
 

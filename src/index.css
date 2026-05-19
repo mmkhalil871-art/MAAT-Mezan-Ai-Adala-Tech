@@ -29,8 +29,8 @@
   --color-lite-sidebar: #F8FAFC;
   --color-lite-accent: #0A1B3D; /* Deep Sovereign Blue */
   --color-lite-bg: #ffffff;
-  --color-lite-text: #0A1B3D;
-  --color-lite-text-muted: #3D5A80;
+  --color-lite-text: #000000;
+  --color-lite-text-muted: #1A1A1A;
   --color-lite-border: #E2E8F0;
 
   /* Font Scaling & Dynamic Colors */
@@ -54,7 +54,7 @@
   }
 
   body {
-    @apply bg-bg-deep text-text-main font-business min-h-screen overflow-hidden antialiased selection:bg-gold-start/20 transition-colors duration-700;
+    @apply bg-bg-deep text-text-main font-business min-h-screen overflow-y-auto overflow-x-hidden antialiased selection:bg-gold-start/20 transition-colors duration-700;
   }
 
   body.light {
@@ -235,33 +235,33 @@ body.light .custom-scrollbar::-webkit-scrollbar-thumb {
 
 /* specialized visible scrollbar for chat area */
 .scrollbar-prominent::-webkit-scrollbar {
-  width: 6px;
+  width: 12px;
 }
 
 @media (min-width: 1024px) {
   .scrollbar-prominent::-webkit-scrollbar {
-    width: 10px;
+    width: 16px;
   }
 }
 
 .scrollbar-prominent::-webkit-scrollbar-track {
-  @apply bg-bg-deep/30;
+  @apply bg-bg-deep/80 border-l border-border-subtle/30;
 }
 
 .scrollbar-prominent::-webkit-scrollbar-thumb {
-  @apply bg-gold-start/40 border-2 border-transparent bg-clip-padding;
+  @apply bg-gold-start border-2 border-transparent bg-clip-padding rounded-full shadow-lg;
 }
 
 .scrollbar-prominent::-webkit-scrollbar-thumb:hover {
-  @apply bg-gold-start/70;
+  @apply bg-white;
+}
+
+body.light .scrollbar-prominent::-webkit-scrollbar-track {
+  @apply bg-lite-sidebar/80 border-l border-lite-border;
 }
 
 body.light .scrollbar-prominent::-webkit-scrollbar-thumb {
-  @apply bg-lite-accent/20;
-}
-
-body.light .scrollbar-prominent::-webkit-scrollbar-thumb:hover {
-  @apply bg-lite-accent/40;
+  @apply bg-lite-accent rounded-full border-2 border-transparent bg-clip-padding opacity-100;
 }
 
 /* No Scrollbar Utility */

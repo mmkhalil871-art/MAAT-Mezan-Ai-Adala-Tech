@@ -41,6 +41,8 @@ export default function HistoryPanel({ language, onClose, onReuse, isFullPage }:
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [clearConfirm, setClearConfirm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   const isAr = language === 'ar';
 
@@ -50,26 +52,68 @@ export default function HistoryPanel({ language, onClose, onReuse, isFullPage }:
 
   const fetchLogs = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const logsData = await getChatHistory();
       setLogs(logsData);
     } catch (err) {
       console.error('Failed to fetch logs:', err);
+      setError(isAr ? 'فشل تحميل السجل. يرجى المحاولة مرة أخرى.' : 'Failed to load history. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDeleteLog = async (id: string) => {
+  const handleDeleteLog = async (id: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    
     setIsDeleting(id);
+    setError(null);
     try {
+      console.log('[History] Starting deletion for:', id);
       await deleteChatHistory(id);
       setLogs(prev => prev.filter(log => log.id !== id));
       setDeleteConfirmId(null);
-    } catch (err) {
-      console.error('Failed to delete history item:', err);
+    } catch (err: unknown) {
+      console.error('[History] Failed to delete history item:', err);
+      // Attempt to parse Firestore error if available
+      let displayError = isAr ? 'فشل حذف السجل. يرجى التحقق من الاتصال.' : 'Failed to delete entry. Please check connection.';
+      if (err instanceof Error) {
+        try {
+          const errorDetail = JSON.parse(err.message);
+          if (errorDetail.error?.includes('permission-denied')) {
+            displayError = isAr ? 'ليست لديك صلاحية لحذف هذا السجل.' : 'Unauthorized to delete this record.';
+          }
+        } catch { /* ignore parse errors */ }
+      }
+      setError(displayError);
     } finally {
       setIsDeleting(null);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (logs.length === 0) return;
+    
+    setIsLoading(true);
+    setError(null);
+    try {
+      console.log('[History] Clearing all history items:', logs.length);
+      // For safety and security rules, we delete items one by one
+      // We use a simple loop instead of Promise.all to avoid overloading or losing context
+      for (const log of logs) {
+        await deleteChatHistory(log.id);
+      }
+      setLogs([]);
+      setClearConfirm(false);
+    } catch (err) {
+      console.error('[History] Failed to clear history:', err);
+      setError(isAr ? 'فشل مسح السجل بالكامل. قد يكون هناك مشكلة في الاتصال.' : 'Failed to clear all history entries. Connection issue suspected.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -97,6 +141,14 @@ export default function HistoryPanel({ language, onClose, onReuse, isFullPage }:
           )}>
             {isAr ? 'سجل الاستشارات القانونية' : 'Legal Consultation History'}
           </h2>
+          {logs.length > 0 && (
+            <button 
+              onClick={() => setClearConfirm(true)}
+              className="ml-4 px-3 py-1 bg-red-500/10 text-red-500 text-[10px] font-black caps rounded-lg hover:bg-red-500/20 transition-all"
+            >
+              {isAr ? 'مسح السجل' : 'Clear History'}
+            </button>
+          )}
         </div>
         {!isFullPage && (
           <button 
@@ -112,6 +164,14 @@ export default function HistoryPanel({ language, onClose, onReuse, isFullPage }:
         "p-4",
         !isFullPage && "border-b border-border-subtle/50"
       )}>
+        {error && (
+          <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center justify-between text-red-500 text-xs font-bold">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="p-1 hover:bg-red-500/20 rounded-full">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         <div className="relative group max-w-2xl">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted opacity-30 group-focus-within:text-gold-start transition-all" />
           <input 
@@ -172,22 +232,17 @@ export default function HistoryPanel({ language, onClose, onReuse, isFullPage }:
                     </span>
                   </div>
                   
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                     {deleteConfirmId === log.id ? (
-                       <button 
-                         onClick={() => handleDeleteLog(log.id)}
-                         className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg"
-                       >
-                         <Trash2 className="w-4 h-4" />
-                       </button>
-                     ) : (
-                       <button 
-                         onClick={() => setDeleteConfirmId(log.id)}
-                         className="p-1.5 text-text-muted hover:text-red-500 rounded-lg"
-                       >
-                         <Trash2 className="w-4 h-4" />
-                       </button>
-                     )}
+                  <div className="flex items-center gap-1">
+                     <button 
+                       onClick={() => setDeleteConfirmId(log.id)}
+                       className={cn(
+                         "p-1.5 rounded-lg transition-all",
+                         deleteConfirmId === log.id ? "text-red-500 bg-red-500/10" : "text-text-muted hover:text-red-500 hover:bg-red-500/5"
+                       )}
+                       title={isAr ? 'حذف' : 'Delete'}
+                     >
+                       <Trash2 className="w-4 h-4" />
+                     </button>
                   </div>
                 </div>
 
@@ -195,7 +250,7 @@ export default function HistoryPanel({ language, onClose, onReuse, isFullPage }:
                   <p className="text-[14px] font-bold text-text-main line-clamp-2 mb-2 leading-relaxed">
                     {log.userMessage}
                   </p>
-                  <p className="text-[12px] text-text-muted/60 line-clamp-3 leading-relaxed">
+                  <p className="text-[12px] text-text-muted/60 line-clamp-3 leading-relaxed break-words">
                     {log.aiResponse}
                   </p>
                 </div>
@@ -217,19 +272,19 @@ export default function HistoryPanel({ language, onClose, onReuse, isFullPage }:
                 </div>
                 
                 {deleteConfirmId === log.id && (
-                  <div className="absolute inset-0 bg-bg-sidebar/95 backdrop-blur-sm z-10 flex flex-col items-center justify-center p-6 text-center">
+                  <div className="absolute inset-0 bg-bg-sidebar/95 backdrop-blur-md z-30 flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-200">
                     <Trash2 className="w-8 h-8 text-red-500 mb-2" />
-                    <p className="text-xs font-bold mb-4">{isAr ? 'هل أنت متأكد من حذف هذا السجل؟' : 'Delete this history entry?'}</p>
+                    <p className="text-[14px] font-bold mb-4 text-text-main">{isAr ? 'هل أنت متأكد من حذف هذا السجل؟' : 'Delete this history entry?'}</p>
                     <div className="flex gap-2">
                        <button 
-                         onClick={() => handleDeleteLog(log.id)}
-                         className="px-4 py-2 bg-red-500 text-white text-[10px] caps font-bold theme-radius"
+                         onClick={(e) => handleDeleteLog(log.id, e)}
+                         className="px-6 py-2 bg-red-500 text-white text-[11px] caps font-bold theme-radius hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
                        >
-                         {isDeleting === log.id ? <Loader2 className="w-3 h-3 animate-spin" /> : (isAr ? 'حذف' : 'Delete')}
+                         {isDeleting === log.id ? <Loader2 className="w-3 h-3 animate-spin" /> : (isAr ? 'حذف نهائي' : 'Permanent Delete')}
                        </button>
                        <button 
                          onClick={() => setDeleteConfirmId(null)}
-                         className="px-4 py-2 bg-bg-soft text-text-muted text-[10px] caps font-bold border border-border-subtle theme-radius"
+                         className="px-6 py-2 bg-bg-soft text-text-muted text-[11px] caps font-bold border border-border-subtle theme-radius hover:bg-bg-deep transition-colors"
                        >
                          {isAr ? 'إلغاء' : 'Cancel'}
                        </button>
@@ -241,6 +296,42 @@ export default function HistoryPanel({ language, onClose, onReuse, isFullPage }:
           </div>
         )}
       </div>
+
+      {clearConfirm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-bg-sidebar border border-border-subtle p-8 theme-radius max-w-md w-full text-center shadow-2xl"
+          >
+            <div className="w-16 h-16 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Trash2 className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-bold text-text-main mb-2">
+              {isAr ? 'مسح سجل الاستشارات' : 'Clear Consultation History'}
+            </h3>
+            <p className="text-sm text-text-muted mb-8 leading-relaxed">
+              {isAr 
+                ? 'سيتم حذف جميع سجلاتك القانونية بشكل نهائي. لا يمكن التراجع عن هذه العملية.' 
+                : 'All your legal consultation records will be permanently deleted. This action cannot be undone.'}
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={handleClearAll}
+                className="flex-1 py-3 bg-red-500 text-white font-bold caps text-xs theme-radius hover:bg-red-600 transition-colors"
+              >
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : (isAr ? 'تأكيد المسح الشامل' : 'Confirm Clear All')}
+              </button>
+              <button 
+                onClick={() => setClearConfirm(false)}
+                className="flex-1 py-3 bg-bg-soft text-text-muted font-bold caps text-xs border border-border-subtle theme-radius hover:bg-bg-deep transition-colors"
+              >
+                {isAr ? 'تراجع' : 'Cancel'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
       
       {isFullPage && (
         <footer className="p-8 border-t border-border-subtle/10 bg-bg-deep/10">

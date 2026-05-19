@@ -3,13 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GoogleGenAI } from "@google/genai";
 import mammoth from "mammoth";
 import { LegalWorkflow, Message, FormType } from "../types";
-
-const ai = new GoogleGenAI({ 
-  apiKey: (process.env.GEMINI_API_KEY || '').trim() 
-});
 
 const SYSTEM_INSTRUCTION = `You are a Senior Legal Intelligence Advisor specialized in Egyptian law, international conventions, and comparative jurisprudence. 
 
@@ -20,11 +15,11 @@ CORE CAPABILITIES & WORKFLOWS:
 1. Drafting: Full laws/decrees using formal Articles and legal preamble.
 2. Regulation Drafting: Specific expertise in drafting ministerial regulations and executive decisions for the Egyptian government.
 3. Analysis: Detect gaps, constitutional conflicts, and hierarchical risks.
-3. Translation: Translate legal texts between English and Arabic using specialized high-level legal terminology (Legalese). Maintain the formal structure.
-4. Forms: Generate professional legal forms (Contracts, Decrees, Powers of Attorney, Memos, Policy Papers). Use a structured template.
-5. Interpretation: Systemic, literal, and purposive interpretation of specific clauses. Especially regarding the new Labour Law No. 14 of 2025.
-6. Legal Library Support: Assist in organizing, reviewing, and identifying relationships between laws, decrees, and updates within the digital depository.
-7. Summarization (Judgment Summary): Specialized analysis of judicial rulings to extract a professional legal summary or complete legal memo. This MUST include:
+4. Translation: Translate legal texts between English and Arabic using specialized high-level legal terminology (Legalese). Maintain the formal structure.
+5. Forms: Generate professional legal forms (Contracts, Decrees, Powers of Attorney, Memos, Policy Papers). Use a structured template.
+6. Interpretation: Systemic, literal, and purposive interpretation of specific clauses. Especially regarding the new Labour Law No. 14 of 2025.
+7. Legal Library Support: Assist in organizing, reviewing, and identifying relationships between laws, decrees, and updates within the digital depository.
+8. Summarization (Judgment Summary): Specialized analysis of judicial rulings to extract a professional legal summary or complete legal memo. This MUST include:
     - Subject (الموضوع): The core legal issue or dispute.
     - Facts (الوقائع): The procedural history and chronological events of the case.
     - Conclusion/Result (النتيجة): The final ruling, verdict, and legal reasoning (ratio decidendi) behind it.
@@ -109,144 +104,111 @@ export async function getFilePart(file: File): Promise<{ inlineData: { data: str
     return { text: `[Attached file: ${file.name} (Format not directly supported for AI analysis)]` };
 }
 
+export async function streamLegalResponse(
+  messages: Message[],
+  workflow: LegalWorkflow = 'General',
+  formType?: FormType,
+  language: 'en' | 'ar' = 'en',
+  persona: string = 'LegalResearcher',
+  files?: File[],
+  onChunk?: (chunk: string) => void
+) {
+  const fileParts = files ? await Promise.all(files.map(f => getFilePart(f))) : [];
+  
+  const history = messages.slice(0, -1).map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }]
+  }));
+
+  const lastUserMessage = messages[messages.length - 1];
+  
+  const contents = [
+    ...history,
+    {
+      role: 'user',
+      parts: [
+        ...fileParts,
+        { text: lastUserMessage.content || "Please analyze these legal documents thoroughly." }
+      ]
+    }
+  ];
+
+  const langFull = language === 'ar' ? 'Arabic' : 'English';
+  const contextPrompt = `CURRENT WORKFLOW: ${workflow}${formType ? `\nTARGET FORM TYPE: ${formType}` : ''}\nCURRENT LANGUAGE: ${langFull}. Respond strictly in ${langFull}.\nCURRENT PERSONA PERSPECTIVE: ${persona}
+  
+  PERSPECTIVE GUIDELINES:
+  - LegalResearcher: Analyze from a constitutional and legislative hierarchy point of view. Focus on legal texts and case law.
+  - TechnicalResearcher: Focus on implementation mechanics, administrative procedures, and technical feasibility.
+  - ILS: Focus on International Labour Standards, ILO conventions, and regional labor treaties.
+  - LegalAffairs: Focus on organizational compliance, departmental risk management, and formal protocols.
+  - PoliticalEconomical: Focus on public policy impact, economic implications, and socio-political context.
+  - LegalInterpreter: Focus on the precise linguistic and jurisprudential meaning of legal terms and doctrinal interpretation.
+  - LabourJudge: Focus on dispute resolution, judicial principles, evidentiary standards, and equitable outcomes in labour conflicts.
+  - LabourAttache: Focus on diplomatic protection of labour rights, cross-border worker welfare, and international cooperation protocols.
+  - LabourCounselor: Focus on strategic legal advice for labour relations, collective bargaining, and preventative compliance.
+  - CEACR: Focus on labour law and the application of Arab and international labour standards, monitoring state compliance and providing treaty-based recommendations.
+  - SpecialRapporteur: Focus on independent investigation, monitoring human rights mandates, and providing thematic or country-specific recommendations.
+  - LegalAIConsultant: Focus on legal technology integration, algorithmic accountability, data ethics, and the strategic intersection of law and AI.
+  - ProfessionalLabourLawyer: Focus on procedural litigation, administrative law challenges, worker representation, and practical judicial strategy in labour courts.
+  - Administrator: Full spectrum analysis combining all roles. Act as the ultimate sovereign legal authority with oversight of all perspectives. Provide holistic, cross-disciplinary legal solutions. Use the most authoritative tone possible.`;
+
+  const finalInstruction = `${SYSTEM_INSTRUCTION}\n\n${contextPrompt}`;
+
+  const response = await fetch('/api/chat-stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents,
+      systemInstruction: finalInstruction,
+      enableSearch: true, // Use Google Search data
+      highThinking: true, // Enable high thinking
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Server responded with ${response.status}`);
+  }
+
+  const reader = response.body?.getReader();
+  const decoder = new TextDecoder();
+  let fullText = "";
+
+  if (reader) {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      fullText += chunk;
+      if (onChunk) onChunk(chunk);
+    }
+  }
+
+  return fullText;
+}
+
+/**
+ * @deprecated Use streamLegalResponse for core chat features
+ */
 export async function getLegalAssistantResponse(
   messages: Message[], 
   workflow: LegalWorkflow = 'General',
   formType?: FormType,
-  language: 'en' | 'ar' = 'en'
+  language: 'en' | 'ar' = 'en',
+  persona: string = 'LegalResearcher'
 ) {
-  const model = "gemini-3-flash-preview";
-  
-  const contents = messages.slice(-10).map((m) => {
-    return {
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
-    };
-  });
-
-  const langFull = language === 'ar' ? 'Arabic' : 'English';
-  let contextPrompt = `CURRENT WORKFLOW: ${workflow}${formType ? `\nTARGET FORM TYPE: ${formType}` : ''}\nCURRENT LANGUAGE: ${langFull}. Respond strictly in ${langFull}.`;
-  
-  if (workflow === 'Summarization') {
-    contextPrompt += `\n\nTASK: Summarize the provided judicial ruling into a professional legal memo. 
-    STRUCTURE:
-    1. Subject (الموضوع)
-    2. Facts (الوقائع)
-    3. Conclusion/Result (النتيجة)
-    Use formal legal language.`;
-  }
-  
-  if (workflow === 'Relationships') {
-    contextPrompt += `\n\nTASK: Identify and map the relationships between the provided law/article/regulation and other related legal instruments, including:
-    - Domestic Legislation: Decrees, regulations, and judicial principles.
-    - International & Regional: Covenants, documents, conventions, protocols, and recommendations.
-    
-    Focus on:
-    - Hierarchical relationships (Executive Decrees linked to a certain Law).
-    - Amending vs amended relationships.
-    - Reference relationships.
-    - Compliance and ratification status for international instruments.
-    Provide a structured overview of the legal network.`;
-  }
-  
-  if (workflow === 'ProvisionSearch') {
-    contextPrompt += `\n\nTASK: Identify and extract the specific governing legal texts, articles, or provisions that apply to the user's inquiry or the provided situation. 
-    Focus on:
-    - Identifying the relevant Law or Code.
-    - Specifying the exact Articles and their verbatim text.
-    - Highlighting mandatory vs optional provisions.
-    - Citing relevant Executive Decrees if applicable.`;
-  }
-  
-  const response = await ai.models.generateContent({
-    model,
-    contents,
-    config: {
-      systemInstruction: `${SYSTEM_INSTRUCTION}\n\n${contextPrompt}`,
-      temperature: 0.2,
-      topP: 0.8,
-    },
-  });
-
-  if (!response.text) {
-    throw new Error("Jurisprudence engine returned empty response. This might be due to content filters or analysis depth.");
-  }
-
-  return response.text;
+  return streamLegalResponse(messages, workflow, formType, language, persona);
 }
 
+/**
+ * @deprecated Use streamLegalResponse for core chat features
+ */
 export async function getLegalMultimodalResponse(
     messages: Message[],
     files: File[],
     workflow: LegalWorkflow,
     formType?: FormType,
-    language: 'en' | 'ar' = 'en'
+    language: 'en' | 'ar' = 'en',
+    persona: string = 'LegalResearcher'
 ) {
-    const model = "gemini-3-flash-preview";
-    
-    const fileParts = await Promise.all(files.map(f => getFilePart(f)));
-    const lastUserMessage = messages[messages.length - 1];
-    
-    const history = messages.slice(0, -1).map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
-    }));
-
-    const langFull = language === 'ar' ? 'Arabic' : 'English';
-    let contextPrompt = `ANALYZING UPLOADED DOCUMENTS.\nCURRENT WORKFLOW: ${workflow}${formType ? `\nTARGET FORM TYPE: ${formType}` : ''}\nCURRENT LANGUAGE: ${langFull}. Respond strictly in ${langFull}.`;
-
-    if (workflow === 'Summarization') {
-        contextPrompt += `\n\nTASK: Extract and summarize the judicial ruling from the attached files into a professional legal memo. 
-        STRUCTURE:
-        1. Subject (الموضوع)
-        2. Facts (الوقائع)
-        3. Conclusion/Result (النتيجة)
-        Use formal legal language. Ensure all names, dates, and case numbers are accurately preserved.`;
-    }
-
-    if (workflow === 'Relationships') {
-        contextPrompt += `\n\nTASK: Analyze the attached documents to identify and map relationships between the specific laws, articles, or regulations mentioned and other related legal instruments.
-        SCOPE:
-        - Domestic: Related legislation, decrees, and circulars.
-        - International/Regional: Covenants, conventions, protocols, and recommendations.
-        
-        STRUCTURE: 
-        - Primary Instrument Identification.
-        - Related Legislation/Decrees/Conventions.
-        - Nature of Relationship (Amendment, Implementation, Conflict, Harmonization).
-        Use formal legal language and maintain the hierarchy of norms.`;
-    }
-
-    if (workflow === 'ProvisionSearch') {
-        contextPrompt += `\n\nTASK: Search the attached documents and your knowledge base to extract the governing legal provisions relevant to this query.
-        STRUCTURE:
-        - Governing Instruments (Laws/Decrees).
-        - Applicable Articles (Verbatim text).
-        - Legal Reasoning (Why these texts apply).
-        - Status (Active/Amended/Repealed).`;
-    }
-
-    const response = await ai.models.generateContent({
-        model,
-        contents: [
-            ...history,
-            {
-                role: 'user',
-                parts: [
-                    ...fileParts,
-                    { text: lastUserMessage.content || "Please analyze these legal documents thoroughly." }
-                ]
-            }
-        ],
-        config: {
-            systemInstruction: `${SYSTEM_INSTRUCTION}\n\n${contextPrompt}`,
-            temperature: 0.1,
-        }
-    });
-
-    if (!response.text) {
-        throw new Error("OCR/Analysis Failure: The ministerial engine could not extract text from the provided documents. Ensure files are non-encrypted PDFs or clear images.");
-    }
-
-    return response.text;
+  return streamLegalResponse(messages, workflow, formType, language, persona, files);
 }

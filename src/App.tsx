@@ -12,25 +12,23 @@ import LibraryPanel from './components/LibraryPanel';
 import HistoryPanel from './components/HistoryPanel';
 import MessagesPanel from './components/MessagesPanel';
 import AboutModal from './components/AboutModal';
+import HowToUseModal from './components/HowToUseModal';
+import { Message, LegalWorkflow, Language, FormType, MessageAction, ResearcherRole } from './types';
 import { WORKFLOW_ACTIONS, OUTCOME_ACTIONS } from './constants';
-import { Message, LegalWorkflow, Language, FormType, MessageAction } from './types';
-import { getLegalAssistantResponse, getLegalMultimodalResponse } from './lib/gemini';
+import { streamLegalResponse } from './lib/gemini';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, LibraryItem } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { Scale } from 'lucide-react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import { Scale, Mic } from 'lucide-react';
+import VoiceConversation from './components/VoiceConversation';
+import { cn } from './lib/utils';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentWorkflow, setCurrentWorkflow] = useState<LegalWorkflow>('General');
+  const [activePersona, setActivePersona] = useState<ResearcherRole>('LegalResearcher');
   const [isLoading, setIsLoading] = useState(false);
   const [language, setLanguage] = useState<Language>('en');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -40,6 +38,8 @@ export default function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [showHowToUse, setShowHowToUse] = useState(false);
+  const [showVoice, setShowVoice] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
   const [pendingContent, setPendingContent] = useState<{ content: string; files?: File[] } | null>(null);
   const [hasDismissedWelcome, setHasDismissedWelcome] = useState(false);
@@ -118,6 +118,8 @@ export default function App() {
 
   const processLegalTask = useCallback(async (content: string, files: File[] | undefined, workflow: LegalWorkflow) => {
     setIsLoading(true);
+    const assistantId = crypto.randomUUID();
+    
     try {
       const userMessage: Message = {
         id: crypto.randomUUID(),
@@ -129,25 +131,45 @@ export default function App() {
       };
       
       const newMessages = [...messages, userMessage];
-      let aiResponse: string;
-      
-      if (files && files.length > 0) {
-        aiResponse = await getLegalMultimodalResponse(newMessages, files, workflow, formType, language);
-      } else {
-        aiResponse = await getLegalAssistantResponse(newMessages, workflow, formType, language);
-      }
+      setMessages(prev => [...prev.filter(m => m.role !== 'system'), userMessage]);
 
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
+      let accumulatedResponse = "";
+      
+      // Initialize assistant message placeholder
+      const initialAssistantMessage: Message = {
+        id: assistantId,
         role: 'assistant',
-        content: aiResponse,
+        content: "",
         workflow,
         timestamp: Date.now(),
-        actions: OUTCOME_ACTIONS, // Ask what to do with the outcome
-        isResult: true
+        isResult: false
       };
+      setMessages(prev => [...prev, initialAssistantMessage]);
 
-      setMessages(prev => [...prev.filter(m => m.role !== 'system'), userMessage, assistantMessage]);
+      const aiResponse = await streamLegalResponse(
+        newMessages, 
+        workflow, 
+        formType, 
+        language, 
+        activePersona, 
+        files,
+        (chunk) => {
+          accumulatedResponse += chunk;
+          setMessages(prev => prev.map(m => 
+            m.id === assistantId ? { ...m, content: accumulatedResponse } : m
+          ));
+        }
+      );
+
+      // Final update with actions and isResult
+      setMessages(prev => prev.map(m => 
+        m.id === assistantId ? { 
+          ...m, 
+          content: aiResponse, 
+          actions: OUTCOME_ACTIONS,
+          isResult: true 
+        } : m
+      ));
 
       // Save to chat history if user is logged in
       if (user?.email) {
@@ -163,24 +185,28 @@ export default function App() {
     } catch (error: unknown) {
       console.error('Legal AI Error:', error);
       const errorDetail = (error as Error)?.message || "Unknown connectivity issue.";
-      setMessages(prev => [...prev.filter(m => m.role !== 'system'), {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: `**Identity Error:** Connection to ministerial jurisprudence engine failed.\n\n*Technical Detail: ${errorDetail}*`,
-        workflow: 'General',
-        timestamp: Date.now(),
-      }]);
+      
+      // Remove the partial assistant message if it failed at the start
+      setMessages(prev => {
+        const filtered = prev.filter(m => m.id !== assistantId);
+        return [...filtered, {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: `**Identity Error:** Connection to ministerial jurisprudence engine failed.\n\n*Technical Detail: ${errorDetail}*`,
+          workflow: 'General',
+          timestamp: Date.now(),
+        }];
+      });
     } finally {
       setIsLoading(false);
     }
-  }, [messages, formType, language]);
+  }, [messages, formType, language, activePersona, user]);
 
   const handleDeleteMessage = useCallback((id: string) => {
     setMessages(prev => prev.filter(m => m.id !== id));
   }, []);
 
   const handleSendMessage = useCallback(async (content: string, files?: File[]) => {
-    // 1. Add user message
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: 'user',
@@ -189,16 +215,17 @@ export default function App() {
       timestamp: Date.now()
     };
     
-    // Check if this is a follow-up (we are already in a workflow and not waiting for a dispatcher choice)
+    // Check if this is a follow-up OR if a specific workflow was already selected from the UI
     const isFollowUp = messages.length > 0 && !pendingContent;
+    const isDirectWorkflow = currentWorkflow !== 'General';
 
-    if (isFollowUp) {
+    if (isFollowUp || isDirectWorkflow) {
       setMessages(prev => [...prev, userMsg]);
       await processLegalTask(content, files, currentWorkflow);
       return;
     }
 
-    // 2. Dispatcher logic for new inputs
+    // Dispatcher logic for new inputs
     setMessages(prev => [...prev, userMsg]);
     setPendingContent({ content, files });
     
@@ -239,13 +266,6 @@ export default function App() {
       } else if (action.value === 'export_pdf') {
         const { downloadAsPDF } = await import('./lib/exportUtils');
         downloadAsPDF(context.content, `legal_doc.pdf`, !!context.isResult);
-      } else if (action.value === 'memo') {
-         // Follow up
-         await processLegalTask(`Re-draft the previous response into a formal Legal Memo format.`, undefined, 'Forms');
-      } else if (action.value === 'policy') {
-         await processLegalTask(`Reformulate the previous analysis into a Policy Paper for parliamentary review.`, undefined, 'Forms');
-      } else if (action.value === 'action_plan') {
-         await processLegalTask(`Generate an implementation Action Plan for the previous legal outcome.`, undefined, 'Forms');
       }
     }
   }, [pendingContent, processLegalTask, handleSaveToLibrary, messages]);
@@ -259,7 +279,13 @@ export default function App() {
     ${content}`;
 
     try {
-      const translation = await getLegalAssistantResponse([{ id: 'temp-id', role: 'user', content: translationPrompt, timestamp: Date.now() }], 'Translation');
+      const translation = await streamLegalResponse(
+        [{ id: 'temp-id', role: 'user', content: translationPrompt, timestamp: Date.now() }], 
+        'Translation', 
+        undefined, 
+        targetLang, 
+        activePersona
+      );
       
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
@@ -267,8 +293,8 @@ export default function App() {
         content: translation,
         workflow: 'Translation',
         timestamp: Date.now(),
-        isResult: true,
-        actions: OUTCOME_ACTIONS
+        actions: OUTCOME_ACTIONS,
+        isResult: true
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -354,6 +380,7 @@ export default function App() {
         onShowHistory={() => setShowHistory(true)}
         onShowMessages={() => setShowMessages(true)}
         onShowAbout={() => setShowAbout(true)}
+        onShowHowToUse={() => setShowHowToUse(true)}
         theme={theme}
         onThemeToggle={toggleTheme}
         fontScale={fontScale}
@@ -399,11 +426,14 @@ export default function App() {
                   onSaveToLibrary={handleSaveToLibrary}
                   isLoading={isLoading}
                   currentWorkflow={currentWorkflow}
+                  activePersona={activePersona}
+                  onPersonaChange={setActivePersona}
                   language={language}
                   formType={formType}
                   onFormTypeChange={setFormType}
                   onActionClick={handleActionClick}
                   onDeleteMessage={handleDeleteMessage}
+                  userEmail={user?.email}
                   theme={theme}
                   onThemeToggle={toggleTheme}
                   onLanguageChange={setLanguage}
@@ -462,7 +492,44 @@ export default function App() {
             />
           )}
         </AnimatePresence>
+
+        <AnimatePresence>
+          {showHowToUse && (
+            <HowToUseModal 
+              isOpen={showHowToUse}
+              onClose={() => setShowHowToUse(false)}
+              language={language}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showVoice && (
+            <VoiceConversation 
+              language={language}
+              onClose={() => setShowVoice(false)}
+            />
+          )}
+        </AnimatePresence>
       </main>
+
+      {/* Floating Voice Toggle */}
+      {!showVoice && (
+        <motion.button
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setShowVoice(true)}
+          className={cn(
+            "fixed bottom-6 z-40 w-14 h-14 rounded-full bg-gold-gradient shadow-2xl flex items-center justify-center text-white transition-all",
+            isAr ? "left-6" : "right-6"
+          )}
+        >
+          <Mic className="w-6 h-6" />
+          <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-bg-deep animate-pulse" />
+        </motion.button>
+      )}
 
       {/* Subtle UI Accents */}
       <div className="fixed top-0 right-0 p-1 pointer-events-none opacity-5 no-print">

@@ -8,26 +8,34 @@ import { motion } from 'motion/react';
 import { 
   Send, 
   Loader2, 
-  Scale, 
   Copy, 
   Check, 
   Paperclip,
   Menu,
-  Network,
   FileText,
-  FileDown,
+  Scale,
   Languages,
   Library,
   Sparkles,
   Trash2,
   Sun,
   Moon,
-  HelpCircle,
   X,
-  Search
+  Cpu,
+  Globe,
+  Briefcase,
+  TrendingUp,
+  Gavel,
+  ShieldCheck,
+  HeartHandshake,
+  UserCog,
+  FileCheck,
+  Eye,
+  ShieldAlert
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { Message, LegalWorkflow, Language, FormType, MessageAction } from '../types';
+import { Message, LegalWorkflow, Language, FormType, MessageAction, ResearcherRole } from '../types';
+import { RESEARCHER_ROLES } from '../constants';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { downloadAsPDF } from '../lib/exportUtils';
@@ -51,7 +59,10 @@ interface ChatAreaProps {
   onThemeToggle: () => void;
   language: Language;
   onLanguageChange: (lang: Language) => void;
+  activePersona: ResearcherRole;
+  onPersonaChange: (persona: ResearcherRole) => void;
   onToggleSidebar?: () => void;
+  userEmail?: string | null;
 }
 
 const formTypes: FormType[] = [
@@ -84,7 +95,10 @@ export default function ChatArea({
   theme,
   onThemeToggle,
   onLanguageChange,
-  onToggleSidebar
+  activePersona,
+  onPersonaChange,
+  onToggleSidebar,
+  userEmail
 }: ChatAreaProps) {
   const [input, setInput] = useState('');
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -184,8 +198,8 @@ export default function ChatArea({
             <Menu className="w-6 h-6" />
           </button>
           
-          <div className="w-8 h-8 flex items-center justify-center opacity-80">
-            <Scale className="w-6 h-6 text-gold-start" />
+          <div className="w-12 h-12 md:w-16 md:h-16 flex items-center justify-center opacity-90 shrink-0 aspect-square">
+            <img src="/logo.png" alt="MAAT Logo" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
           </div>
           <div className="flex flex-col">
             <h2 className="text-[12px] font-bold text-text-main caps tracking-[0.3em] opacity-80 font-serif text-gold-gradient leading-none">
@@ -224,73 +238,107 @@ export default function ChatArea({
       {/* Messages Scroll Area - Simplified spacing */}
       <div 
         ref={chatPrintRef}
-        className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-12 py-6 sm:py-8 pb-2 space-y-8 sm:space-y-12 scrollbar-prominent print:p-8"
+        className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-12 py-6 sm:py-8 pb-2 scrollbar-prominent print:p-8"
       >
         {messages.length === 0 && (
-          <div className="max-w-5xl mx-auto mt-2 md:mt-4 flex flex-col items-center">
-            <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-              <div className="p-3 bg-bg-sidebar/40 border border-border-subtle/50 theme-radius flex flex-col gap-1">
-                <span className="text-[9px] caps text-gold-start/60">{isAr ? 'حالة النظام' : 'System Status'}</span>
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-xs font-medium">{isAr ? 'العقدة الوزارية نشطة' : 'Ministerial Node Active'}</span>
+          <div className="max-w-5xl mx-auto h-full flex flex-col pt-0 md:pt-2">
+            <div className="flex-1 overflow-y-auto scrollbar-prominent pr-2 space-y-6 sm:space-y-8">
+              <div className="w-full grid grid-cols-2 md:grid-cols-3 gap-2">
+                <div className="p-2 sm:p-3 bg-transparent border-none theme-radius flex flex-col gap-0.5">
+                  <span className="text-[8px] sm:text-[9px] caps text-gold-start/60">{isAr ? 'حالة النظام' : 'System Status'}</span>
+                  <div className="flex items-center gap-1.5 md:gap-2">
+                    <div className="w-1 md:w-1.5 h-1 md:h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[10px] md:text-xs font-medium">{isAr ? 'العقدة الوزارية نشطة' : 'Ministerial Node Active'}</span>
+                  </div>
+                </div>
+                <div className="p-2 sm:p-3 bg-transparent border-none theme-radius flex flex-col gap-0.5">
+                  <span className="text-[8px] sm:text-[9px] caps text-gold-start/60">{isAr ? 'قاعدة البيانات القانونية' : 'Legal Database'}</span>
+                  <span className="text-[10px] md:text-xs font-medium">{isAr ? 'تمت مزامنة القاعدة السيادية' : 'Sovereign Base Synced'}</span>
+                </div>
+                <div className="p-2 sm:p-3 bg-transparent border-none theme-radius flex flex-col gap-0.5 hidden md:flex">
+                  <span className="text-[8px] sm:text-[9px] caps text-gold-start/60">{isAr ? 'مجمع المعالجة' : 'Processing Pool'}</span>
+                  <span className="text-[10px] md:text-xs font-medium">{isAr ? '99.9% معدل النزاهة' : '99.9% Integrity Rate'}</span>
                 </div>
               </div>
-              <div className="p-3 bg-bg-sidebar/40 border border-border-subtle/50 theme-radius flex flex-col gap-1">
-                <span className="text-[9px] caps text-gold-start/60">{isAr ? 'قاعدة البيانات القانونية' : 'Legal Database'}</span>
-                <span className="text-xs font-medium">{isAr ? 'تمت مزامنة القاعدة السيادية' : 'Sovereign Base Synced'}</span>
-              </div>
-              <div className="p-3 bg-bg-sidebar/40 border border-border-subtle/50 theme-radius flex flex-col gap-1">
-                <span className="text-[9px] caps text-gold-start/60">{isAr ? 'مجمع المعالجة' : 'Processing Pool'}</span>
-                <span className="text-xs font-medium">{isAr ? '99.9% معدل النزاهة' : '99.9% Integrity Rate'}</span>
-              </div>
-            </div>
 
-            <div className="mb-6 text-center flex flex-col items-center">
-              <div className="w-12 h-12 md:w-14 md:h-14 bg-gold-start/5 rounded-full flex items-center justify-center mb-2 logo-3d border border-gold-start/10">
-                <Scale className="w-6 h-6 md:w-7 md:h-7 text-gold-start" />
+              <div className="text-center flex flex-col items-center">
+                <div className="w-[clamp(8rem,25vw,16rem)] aspect-square flex items-center justify-center mb-6 bg-transparent shrink-0">
+                  <img src="/logo.png" alt="MAAT Logo" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                </div>
+                <h2 className="text-2xl md:text-3xl lg:text-4xl font-semibold font-serif text-text-main mb-2 tracking-tight leading-tight">
+                  {translations.welcome}
+                </h2>
+                <p className="text-xs md:text-base text-text-muted/60 font-sans tracking-wide max-w-xl leading-relaxed opacity-80">
+                  {translations.description}
+                </p>
               </div>
-              <h2 className="text-xl md:text-2xl font-semibold font-serif text-text-main mb-1 tracking-tight leading-tight">
-                {translations.welcome}
-              </h2>
-              <p className="text-xs md:text-sm text-text-muted/60 font-sans tracking-wide max-w-xl leading-relaxed opacity-80">
-                {translations.description}
-              </p>
-            </div>
-            
-            <div className="w-full flex flex-col gap-2">
-              <div className="flex items-center gap-3 px-2 mb-1">
-                <Sparkles className="w-3 h-3 text-gold-start" />
-                <span className="text-[10px] caps font-bold text-text-muted">{isAr ? 'مسار عمل سريع' : 'Accelerated Workflows'}</span>
+
+              {/* Persona Tabs Block */}
+              <div className="w-full max-w-5xl mx-auto p-4 md:p-6 bg-transparent flex flex-col items-center gap-4 md:gap-6 relative group">
+                <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gold-gradient opacity-10" />
+                
+                <div className="flex flex-col items-center gap-3 relative z-10">
+                  <div className="flex items-center gap-4">
+                    <div className="w-8 md:w-16 h-[1px] bg-gold-start/30" />
+                    <span className="text-[8px] md:text-[11px] caps font-bold text-gold-start tracking-[0.5em] opacity-70">
+                       {isAr ? 'تحديد الدور البحثي' : 'RESEARCHER ROLE SELECTION'}
+                    </span>
+                    <div className="w-8 md:w-16 h-[1px] bg-gold-start/30" />
+                  </div>
+                  <h3 className="text-lg md:text-xl font-serif font-black text-text-main flex items-center gap-3">
+                    <Sparkles className="w-4 md:w-5 h-4 md:h-5 text-gold-start animate-pulse" />
+                    {isAr ? 'أنت الآن تعمل بصفتك:' : 'Now you are acting as:'}
+                  </h3>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3 relative z-10">
+                  {RESEARCHER_ROLES.filter(role => role.id !== 'Administrator' || userEmail === 'm.mkhalil871@gmail.com').map((role) => {
+                    const icons: Record<string, React.ElementType> = { 
+                      Scale, 
+                      Cpu, 
+                      Globe, 
+                      Briefcase, 
+                      TrendingUp,
+                      Gavel,
+                      ShieldCheck,
+                      HeartHandshake,
+                      UserCog,
+                      FileCheck,
+                      Eye,
+                      Sparkles,
+                      ShieldAlert
+                    };
+                    const Icon = icons[role.icon];
+                    return (
+                      <button
+                        key={role.id}
+                        onClick={() => onPersonaChange(role.id as ResearcherRole)}
+                        className={cn(
+                          "flex items-center gap-2 md:gap-4 px-3 md:px-5 py-2 md:py-3 theme-radius transition-all text-[10px] md:text-xs font-bold caps whitespace-nowrap border shadow-sm hover:shadow-xl group/btn active:scale-95",
+                          activePersona === role.id 
+                            ? (theme === 'dark' ? "bg-gold-start/20 text-gold-start border-gold-start/40 shadow-gold-start/10" : "bg-primary-action text-white border-primary-action") 
+                            : "bg-bg-deep/40 text-text-muted border-border-subtle/40 hover:text-text-main hover:bg-bg-sidebar/60 hover:border-gold-start/30"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-6 h-6 md:w-8 md:h-8 rounded-lg flex items-center justify-center transition-all duration-500",
+                          activePersona === role.id 
+                            ? "bg-gold-start/20" 
+                            : "bg-bg-sidebar/40 group-hover/btn:bg-gold-start/10"
+                        )}>
+                          {Icon && <Icon className={cn("w-3.5 h-3.5 md:w-4 md:h-4 transition-transform duration-500 group-hover/btn:scale-110", activePersona === role.id ? "scale-110 text-gold-start" : "opacity-40")} />}
+                        </div>
+                        <span className="tracking-[0.1em]">{isAr ? role.labelAr : role.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="absolute -bottom-16 -right-16 w-32 h-32 bg-gold-start/5 blur-3xl rounded-full opacity-50" />
+                <div className="absolute -top-16 -left-16 w-32 h-32 bg-gold-start/5 blur-3xl rounded-full opacity-50" />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {[
-                  { icon: FileText, title: isAr ? "صياغة تشريعية" : "Legislative Drafting", desc: isAr ? "إعداد قرارات وزارية ومراسيم" : "Prepare ministerial decrees & legislation", prompt: isAr ? "صياغة قرار جديد للمناطق الاستثمارية." : "Draft a new decree for investment zones." },
-                  { icon: Search, title: isAr ? "النصوص الحاكمة" : "Governing Texts", desc: isAr ? "البحث عن النصوص الحاكمة للاستفسار" : "Search for governing legal texts", prompt: isAr ? "ما هي النصوص القانونية الحاكمة للاستفسار التالي: " : "What are the governing legal texts for the following inquiry: " },
-                  { icon: Network, title: isAr ? "الروابط القانونية" : "Legal Relationships", desc: isAr ? "خارطة التشريعات والمعاهدات" : "Map legislation & treaties", prompt: isAr ? "تحليل الروابط القانونية لهذا النص مع التشريعات والمعاهدات الدولية." : "Analyze legal relationships of this text with legislation and international treaties." },
-                  { icon: Sparkles, title: isAr ? "تحليل قضائي" : "Judicial Analysis", desc: isAr ? "تلخيص أحكام وتحديد ثغرات" : "Summarize rulings & identify gaps", prompt: isAr ? "لخص هذا الحكم في مذكرة قانونية." : "Summarize this judicial ruling into a memo." },
-                  { icon: FileDown, title: isAr ? "خطاب رسمي/قانوني" : "Formal/Legal Letter", desc: isAr ? "صياغة خطابات رسمية أو قانونية" : "Draft formal or legal correspondence", prompt: isAr ? "إعداد خطاب رسمي موجه إلى..." : "Draft a formal letter addressed to..." },
-                  { icon: Languages, title: isAr ? "ترجمة قانونية" : "Legal Translation", desc: isAr ? "ترجمة دقيقة للنصوص السيادية" : "Accurate translation of sovereign texts", prompt: isAr ? "ترجمة رسمية لهذا البند..." : "Formal translation of this clause..." },
-                  { icon: HelpCircle, title: isAr ? "سؤال قانوني" : "Ask a legal question", desc: isAr ? "إجابات فورية على استفسارات قانونية" : "Instant answers to legal queries", prompt: isAr ? "أريد طرح سؤال قانوني بخصوص..." : "I would like to ask a legal question regarding..." }
-                ].map((action, i) => (
-                  <button 
-                    key={i}
-                    onClick={() => setInput(action.prompt)}
-                    className={cn(
-                      "p-4 border border-border-subtle/50 theme-radius transition-all text-left flex items-start gap-3 hover:border-gold-start/40 hover:bg-bg-sidebar/40 group",
-                      theme === 'dark' ? "bg-bg-sidebar/20" : "bg-white shadow-sm hover:shadow-md"
-                    )}
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-gold-start/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                      <action.icon className="w-4 h-4 text-gold-start" />
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-xs font-bold text-text-main group-hover:text-gold-start transition-colors">{action.title}</span>
-                      <span className="text-[10px] text-text-muted leading-relaxed opacity-70">{action.desc}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              
+              <div className="h-12 w-full" /> {/* Bottom spacer for scrolling comfort */}
             </div>
           </div>
         )}
@@ -455,23 +503,23 @@ export default function ChatArea({
 
               {message.actions && message.actions.length > 0 && (
                 <div className={cn(
-                  "flex flex-wrap gap-2 w-full pt-2",
+                  "flex flex-wrap gap-2 w-full pt-4",
                   message.role === 'user' ? "justify-end" : "justify-start"
                 )}>
                   {message.actions.map(action => (
                     <motion.button
                       key={action.id}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
                       onClick={() => onActionClick(action, message)}
                       className={cn(
-                        "px-6 py-2.5 text-[10px] font-bold caps transition-all flex items-center gap-2 border theme-radius bg-bg-sidebar relative overflow-hidden group",
+                        "px-4 py-2 text-[10px] font-bold caps transition-all flex items-center gap-2 border theme-radius relative overflow-hidden group shadow-sm",
                         action.type === 'workflow' 
-                          ? "border-gold-start/20 text-gold-start hover:bg-gold-start/10" 
-                          : "border-emerald-500/20 text-emerald-500 hover:bg-emerald-500/10"
+                          ? "border-gold-start/20 text-gold-start bg-gold-start/5 hover:bg-gold-start/10" 
+                          : "border-emerald-500/20 text-emerald-500 bg-emerald-500/5 hover:bg-emerald-500/10"
                       )}
                     >
-                      <Sparkles className="w-3.5 h-3.5 group-hover:rotate-12 transition-transform" />
+                      <Sparkles className="w-3 h-3 group-hover:rotate-12 transition-transform opacity-60" />
                       {isAr ? action.labelAr : action.label}
                     </motion.button>
                   ))}
