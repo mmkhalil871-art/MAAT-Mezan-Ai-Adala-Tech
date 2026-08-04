@@ -7,8 +7,7 @@ import {
   Scale, 
   Search, 
   Sparkles,
-  Network,
-  FileCode, 
+  Network, 
   Globe, 
   Plus,
   FilePlus,
@@ -30,7 +29,8 @@ import {
   X,
   Info,
   User as UserIcon,
-  Inbox
+  Inbox,
+  Repeat
 } from 'lucide-react';
 import { LegalWorkflow, Language } from '../types';
 import { clsx, type ClassValue } from 'clsx';
@@ -79,7 +79,7 @@ const workflows: { id: LegalWorkflow; label: { en: string; ar: string }; icon: R
   { id: 'Relationships', label: { en: 'Relationships', ar: 'الروابط القانونية' }, icon: Network },
   { id: 'Forms', label: { en: 'Forms', ar: 'النماذج' }, icon: FileSignature },
   { id: 'Translation', label: { en: 'Translate', ar: 'الترجمة' }, icon: Languages },
-  { id: 'Redrafting', label: { en: 'Refine', ar: 'التحسين' }, icon: FileCode },
+  { id: 'Redrafting', label: { en: 'Rephrase / Redraft', ar: 'إعادة الصياغة' }, icon: Repeat },
 ];
 
 export default function Sidebar({ 

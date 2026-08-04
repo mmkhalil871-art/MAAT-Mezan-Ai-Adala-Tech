@@ -9,11 +9,64 @@ export const APP_DESCRIPTION = 'Mezan Ai Adala Tech - Legal AI System';
 
 import { MessageAction } from './types';
 
+export interface RephraseStyleOption {
+  id: string;
+  label: string;
+  labelAr: string;
+  description: string;
+  descriptionAr: string;
+  instructionPrompt: string;
+}
+
+export const REPHRASE_STYLES: RephraseStyleOption[] = [
+  {
+    id: 'legislative',
+    label: 'Legislative Drafting',
+    labelAr: 'صياغة تشريعية محكمة',
+    description: 'Structured into formal articles and statutory clauses with strict legal precision.',
+    descriptionAr: 'تحويل النص إلى بنود ومواد تشريعية رسمية محكمة.',
+    instructionPrompt: 'Rephrase into formal statutory articles and clauses suitable for laws and executive decrees.'
+  },
+  {
+    id: 'simplified',
+    label: 'Simplified Legal',
+    labelAr: 'تبسيط قانوني',
+    description: 'Clear, plain-language legal formulation accessible without losing legal weight.',
+    descriptionAr: 'صياغة قانونية ميسرة وواضحة تناسب الفهم العام دون إخلال بالقيمة القانونية.',
+    instructionPrompt: 'Rephrase into clear, plain, and simplified legal language while maintaining full legal force.'
+  },
+  {
+    id: 'executive',
+    label: 'Executive Brief',
+    labelAr: 'موجز تنفيذي كبار المسؤولين',
+    description: 'High-level executive overview tone for ministers, judges, and corporate executives.',
+    descriptionAr: 'أسلوب إيجاز تنفيذي رفيع المستوى موجه للوزراء والقضاة والإدارة العليا.',
+    instructionPrompt: 'Rephrase into a high-level executive briefing tone tailored for senior decision-makers.'
+  },
+  {
+    id: 'diplomatic',
+    label: 'Diplomatic & Policy',
+    labelAr: 'دبلوماسي وسياساتي',
+    description: 'Diplomatic and treaty-level wording for international agreements and formal statements.',
+    descriptionAr: 'صياغة دبلماسية وسياساتية رسمية تناسب الاتفاقيات والمواثيق والبيانات الدولية.',
+    instructionPrompt: 'Rephrase into formal diplomatic and policy paper language suitable for international instruments.'
+  },
+  {
+    id: 'court_memo',
+    label: 'Court & Pleading',
+    labelAr: 'مذكرات ومرافعة',
+    description: 'Persuasive judicial style tailored for pleadings, legal briefs, and court memos.',
+    descriptionAr: 'صياغة قضائية مسبوكة ومقنعة مخصصة للمذكرات ولوائح الدعاوى والمرافعات.',
+    instructionPrompt: 'Rephrase into a persuasive judicial and court pleading style tailored for legal memos.'
+  }
+];
+
 export const WORKFLOW_ACTIONS: MessageAction[] = [
   { id: '1', label: 'Analysis', labelAr: 'التحليل', type: 'workflow', value: 'Analysis' },
   { id: '2', label: 'Draft Text', labelAr: 'صياغة نص', type: 'workflow', value: 'Drafting' },
   { id: '3', label: 'Regulation', labelAr: 'تشريع جديد', type: 'workflow', value: 'Regulation' },
   { id: '4', label: 'Interpret', labelAr: 'التفسير', type: 'workflow', value: 'Interpretation' },
+  { id: '5', label: 'Rephrase / Redraft', labelAr: 'إعادة الصياغة', type: 'workflow', value: 'Redrafting' },
   { id: '7', label: 'Advisor', labelAr: 'المستشار', type: 'workflow', value: 'General' },
   { id: '9', label: 'Ruling Summary', labelAr: 'تلخيص الأحكام', type: 'workflow', value: 'Summarization' },
   { id: '10', label: 'Relationships', labelAr: 'الروابط القانونية', type: 'workflow', value: 'Relationships' },
@@ -26,6 +79,7 @@ export const WORKFLOW_ACTIONS: MessageAction[] = [
 export const OUTCOME_ACTIONS: MessageAction[] = [
   { id: 'o1', label: 'Save to Library', labelAr: 'حفظ في المكتبة', type: 'output', value: 'save' },
   { id: 'o2', label: 'Export PDF', labelAr: 'تصدير PDF', type: 'output', value: 'export_pdf' },
+  { id: 'o14', label: 'Rephrase Document', labelAr: 'إعادة صياغة النص', type: 'workflow', value: 'Redrafting' },
   { id: 'o12', label: 'Speech Formulation', labelAr: 'صياغة خطاب', type: 'workflow', value: 'Forms', formType: 'Speech' },
   { id: 'o13', label: 'Official Statement', labelAr: 'بيان رسمي', type: 'workflow', value: 'Forms', formType: 'Statement' },
   { id: 'o10', label: 'Legislative Drafting', labelAr: 'الصياغة التشريعية', type: 'workflow', value: 'Drafting' },

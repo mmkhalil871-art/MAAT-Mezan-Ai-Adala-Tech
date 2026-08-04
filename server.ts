@@ -28,6 +28,81 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
 
+  // API Route for Key Verification Ping
+  app.get("/api/verify-key", async (_req, res) => {
+    const key = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : '';
+    if (!key) {
+      return res.json({
+        ok: false,
+        status: "invalid_key",
+        message: "GEMINI_API_KEY is not set in server environment."
+      });
+    }
+
+    try {
+      // Perform lightweight ping request to verify API key with fallback
+      const pingModels = ["gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"];
+      let pingSuccess = false;
+      let pingError: unknown = null;
+
+      for (const mName of pingModels) {
+        try {
+          const result = await ai.models.generateContent({
+            model: mName,
+            contents: "ping",
+            config: { maxOutputTokens: 1 }
+          });
+          if (result) {
+            pingSuccess = true;
+            break;
+          }
+        } catch (err) {
+          pingError = err;
+        }
+      }
+
+      if (pingSuccess) {
+        return res.json({
+          ok: true,
+          status: "valid",
+          message: "Gemini API Key is valid and functional."
+        });
+      }
+      throw pingError || new Error("Ping returned empty response.");
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const isQuota = errMsg.includes("RESOURCE_EXHAUSTED") || 
+                      errMsg.includes("429") || 
+                      errMsg.includes("quota") || 
+                      errMsg.includes("Quota");
+      const isInvalidKey = errMsg.includes("API_KEY_INVALID") ||
+                           errMsg.includes("API key not valid") ||
+                           errMsg.includes("INVALID_ARGUMENT") ||
+                           errMsg.includes("UNAUTHENTICATED") ||
+                           errMsg.includes("API_KEY");
+
+      if (isQuota) {
+        return res.json({
+          ok: false,
+          status: "quota_exceeded",
+          message: "Gemini API Key quota rate limit exceeded."
+        });
+      } else if (isInvalidKey) {
+        return res.json({
+          ok: false,
+          status: "invalid_key",
+          message: "Gemini API Key is invalid or unauthorized."
+        });
+      } else {
+        return res.json({
+          ok: false,
+          status: "error",
+          message: errMsg
+        });
+      }
+    }
+  });
+
   // API Route for Streaming Chat
   app.post("/api/chat-stream", async (req, res) => {
     const { contents, systemInstruction, enableSearch, highThinking } = req.body;
@@ -37,34 +112,91 @@ async function startServer() {
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Transfer-Encoding', 'chunked');
 
-    try {
-      const isHighThinking = highThinking === true;
-      const response = await ai.models.generateContentStream({
-        model: isHighThinking ? "gemini-3-flash-preview" : "gemini-3.1-flash-lite",
-        contents,
-        config: {
+    const isHighThinking = highThinking === true;
+    const modelCandidates = isHighThinking 
+      ? ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-flash-latest"]
+      : ["gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-flash-latest"];
+
+    let lastError: unknown = null;
+    let streamSuccess = false;
+
+    for (const modelName of modelCandidates) {
+      try {
+        console.log(`Starting chat streaming attempt with model: ${modelName}`);
+        
+        const isGemini3 = modelName.startsWith("gemini-3");
+        const config = {
           systemInstruction,
           temperature: isHighThinking ? 0.7 : 0.2, 
-          thinkingConfig: isHighThinking ? {
-            thinkingLevel: ThinkingLevel.HIGH
-          } : undefined,
           tools: enableSearch ? [{ googleSearch: {} }] : undefined,
-        }
-      });
+          thinkingConfig: isGemini3 ? {
+            thinkingLevel: isHighThinking ? ThinkingLevel.HIGH : ThinkingLevel.LOW
+          } : undefined
+        };
 
-      for await (const chunk of response) {
-        if (chunk.text) {
-          res.write(chunk.text);
+        const response = await ai.models.generateContentStream({
+          model: modelName,
+          contents,
+          config
+        });
+
+        for await (const chunk of response) {
+          if (chunk.text) {
+            res.write(chunk.text);
+          }
         }
         
-        // If there is grounding metadata, we might want to send it too, 
-        // but for simple text streaming, we just send the text.
-        // In a more complex app, we could use a custom separator or JSON chunks.
+        streamSuccess = true;
+        console.log(`Successfully completed chat stream with model: ${modelName}`);
+        break;
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const isQuota = errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("Quota");
+        if (isQuota) {
+          console.warn(`Model ${modelName} stream reached API quota limit (429 RESOURCE_EXHAUSTED). Trying next candidate...`);
+        } else {
+          console.warn(`Model ${modelName} stream failed:`, errMsg);
+        }
+        lastError = err;
+        // Continue to the next candidate model
+      }
+    }
+
+    try {
+      if (!streamSuccess) {
+        throw lastError || new Error("All candidate models failed to stream.");
       }
       res.end();
     } catch (error) {
-      console.error("Streaming Chat Error:", error);
-      res.write(`\n\n[ERROR: ${error instanceof Error ? error.message : String(error)}]`);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      const isQuotaExceeded = errMsg.includes("RESOURCE_EXHAUSTED") || 
+                              errMsg.includes("429") || 
+                              errMsg.includes("quota") || 
+                              errMsg.includes("Quota");
+      const isInvalidKey = errMsg.includes("API_KEY_INVALID") ||
+                           errMsg.includes("API key not valid") ||
+                           errMsg.includes("INVALID_ARGUMENT") ||
+                           errMsg.includes("UNAUTHENTICATED") ||
+                           errMsg.includes("API_KEY");
+
+      if (isQuotaExceeded || isInvalidKey) {
+        const title = isInvalidKey 
+          ? "⚠️ Gemini API Key Invalid / مفتاح غير صالح" 
+          : "⚠️ Gemini API Quota Exceeded / نفاد حصة واجهة برمجة التطبيقات";
+        
+        console.warn("Chat streaming error handled:", title);
+        res.write(`\n\n---\n\n### ${title}\n\n` +
+          `The Gemini API key is missing, invalid, or has exceeded its quota rate limits. / مفتاح واجهة برمجة التطبيقات لـ Gemini غير صالح أو غير موجود أو تجاوز حد الحصة المتاحة.\n\n` +
+          `**How to fix this issue / كيفية حل المشكلة:**\n\n` +
+          `1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey) to generate or copy a fresh **Gemini API Key**. / احصل على مفتاح جديد من [Google AI Studio](https://aistudio.google.com/app/apikey).\n` +
+          `2. Open the **Settings > Secrets** menu in the bottom-left sidebar of AI Studio. / افتح قائمة **الإعدادات > الأسرار (Settings > Secrets)** من الشريط الجانبي الأيسر السفلي.\n` +
+          `3. Set or update **GEMINI_API_KEY** with your valid key. / أضف أو حدث قيمة **GEMINI_API_KEY** بمفتاحك الصحيح.\n` +
+          `4. Try sending your message or analyzing content again! / أعد محاولة إرسال الرسالة أو تحليل المحتوى.\n\n` +
+          `*(Technical Details: ${isInvalidKey ? "API_KEY_INVALID" : "RESOURCE_EXHAUSTED / 429 Too Many Requests"})*`);
+      } else {
+        console.error("Streaming Chat Error:", errMsg);
+        res.write(`\n\n[ERROR: ${errMsg}]`);
+      }
       res.end();
     }
   });
@@ -115,10 +247,41 @@ async function startServer() {
         throw new Error("GEMINI_API_KEY is not configured on the server.");
       }
 
-      const result = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
-        contents: prompt
-      });
+      const modelCandidates = ["gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-flash-latest"];
+      let result = null;
+      let lastError: unknown = null;
+
+      for (const modelName of modelCandidates) {
+        try {
+          console.log(`Starting URL analysis with model candidate: ${modelName}`);
+          const isGemini3 = modelName.startsWith("gemini-3");
+          const config = isGemini3 ? {
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
+          } : undefined;
+          result = await ai.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config
+          });
+          if (result && result.text) {
+            console.log(`Successfully analyzed URL using model: ${modelName}`);
+            break;
+          }
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const isQuota = errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("Quota");
+          if (isQuota) {
+            console.warn(`URL Analysis with model ${modelName} reached API quota limit.`);
+          } else {
+            console.warn(`URL Analysis with model ${modelName} failed:`, errMsg);
+          }
+          lastError = err;
+        }
+      }
+
+      if (!result || !result.text) {
+        throw lastError || new Error("All URL analysis model candidates failed.");
+      }
       
       const output = result.text;
       if (!output) throw new Error("Empty response from AI engine");
@@ -132,9 +295,19 @@ async function startServer() {
         capturedContent: cleanContent
       });
     } catch (error) {
-      console.error("URL Analysis Error:", error);
       const msg = error instanceof Error ? error.message : String(error);
-      res.status(500).json({ error: `Could not analyze URL contents: ${msg}` });
+      const isQuota = msg.includes("RESOURCE_EXHAUSTED") || msg.includes("429") || msg.includes("quota") || msg.includes("Quota");
+      if (isQuota) {
+        console.warn("URL Analysis failed due to Gemini API Quota limit.");
+      } else {
+        console.error("URL Analysis Error:", msg);
+      }
+      res.status(isQuota ? 429 : 500).json({ 
+        error: isQuota 
+          ? "Gemini API Quota Exceeded. Please configure your GEMINI_API_KEY under Settings > Secrets." 
+          : `Could not analyze URL contents: ${msg}`,
+        isQuotaError: isQuota
+      });
     }
   });
 
@@ -156,10 +329,43 @@ async function startServer() {
         throw new Error("GEMINI_API_KEY is not configured on the server.");
       }
 
-      const result = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
-        contents: prompt
-      });
+      console.log("Starting content analysis...");
+
+      const modelCandidates = ["gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-flash-latest"];
+      let result = null;
+      let lastError: unknown = null;
+
+      for (const modelName of modelCandidates) {
+        try {
+          console.log(`Starting content analysis with model candidate: ${modelName}`);
+          const isGemini3 = modelName.startsWith("gemini-3");
+          const config = isGemini3 ? {
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
+          } : undefined;
+          result = await ai.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config
+          });
+          if (result && result.text) {
+            console.log(`Successfully analyzed content using model: ${modelName}`);
+            break;
+          }
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const isQuota = errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("Quota");
+          if (isQuota) {
+            console.warn(`Content Analysis with model ${modelName} reached API quota limit.`);
+          } else {
+            console.warn(`Content Analysis with model ${modelName} failed:`, errMsg);
+          }
+          lastError = err;
+        }
+      }
+
+      if (!result || !result.text) {
+        throw lastError || new Error("All content analysis model candidates failed.");
+      }
       
       const output = result.text;
       if (!output) throw new Error("Empty response from AI engine");
@@ -169,8 +375,19 @@ async function startServer() {
 
       res.json(analysis);
     } catch (error) {
-      console.error("Content Analysis Error:", error);
-      res.status(500).json({ error: "Could not analyze content" });
+      const msg = error instanceof Error ? error.message : String(error);
+      const isQuota = msg.includes("RESOURCE_EXHAUSTED") || msg.includes("429") || msg.includes("quota") || msg.includes("Quota");
+      if (isQuota) {
+        console.warn("Content Analysis failed due to Gemini API Quota limit.");
+      } else {
+        console.error("Content Analysis Error:", msg);
+      }
+      res.status(isQuota ? 429 : 500).json({ 
+        error: isQuota 
+          ? "Gemini API Quota Exceeded. Please configure your GEMINI_API_KEY under Settings > Secrets." 
+          : "Could not analyze content",
+        isQuotaError: isQuota
+      });
     }
   });
 

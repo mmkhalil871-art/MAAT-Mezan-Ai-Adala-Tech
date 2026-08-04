@@ -31,14 +31,21 @@ import {
   UserCog,
   FileCheck,
   Eye,
-  ShieldAlert
+  ShieldAlert,
+  Zap,
+  Brain,
+  KeyRound,
+  RefreshCw,
+  ExternalLink,
+  Repeat
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Message, LegalWorkflow, Language, FormType, MessageAction, ResearcherRole } from '../types';
-import { RESEARCHER_ROLES } from '../constants';
+import { RESEARCHER_ROLES, REPHRASE_STYLES } from '../constants';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { downloadAsPDF } from '../lib/exportUtils';
+import { ApiKeyVerification } from '../lib/gemini';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -48,11 +55,14 @@ interface ChatAreaProps {
   messages: Message[];
   onSendMessage: (content: string, files?: File[]) => void;
   onTranslateMessage: (content: string, targetLang: Language) => void;
+  onRephraseMessage?: (content: string) => void;
   onSaveToLibrary: (content: string, title?: string) => void;
   isLoading: boolean;
   currentWorkflow: LegalWorkflow;
   formType: FormType;
   onFormTypeChange: (type: FormType) => void;
+  rephraseStyle?: string;
+  onRephraseStyleChange?: (style: string) => void;
   onActionClick: (action: MessageAction, messageContext: Message) => void;
   onDeleteMessage: (id: string) => void;
   theme: 'dark' | 'light';
@@ -63,6 +73,10 @@ interface ChatAreaProps {
   onPersonaChange: (persona: ResearcherRole) => void;
   onToggleSidebar?: () => void;
   userEmail?: string | null;
+  responseMode: 'latency' | 'thinking';
+  onResponseModeChange: (mode: 'latency' | 'thinking') => void;
+  apiKeyStatus?: ApiKeyVerification;
+  onReverifyKey?: () => void;
 }
 
 // Form types are now handled inside the component to support filtering by persona
@@ -71,12 +85,15 @@ export default function ChatArea({
   messages, 
   onSendMessage, 
   onTranslateMessage,
+  onRephraseMessage,
   onSaveToLibrary,
   isLoading, 
   currentWorkflow, 
   language,
   formType,
   onFormTypeChange,
+  rephraseStyle = 'legislative',
+  onRephraseStyleChange,
   onActionClick,
   onDeleteMessage,
   theme,
@@ -85,12 +102,18 @@ export default function ChatArea({
   activePersona,
   onPersonaChange,
   onToggleSidebar,
-  userEmail
+  userEmail,
+  responseMode,
+  onResponseModeChange,
+  apiKeyStatus,
+  onReverifyKey
 }: ChatAreaProps) {
   const [input, setInput] = useState('');
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [attachments, setAttachments] = useState<{file: File, preview?: string}[]>([]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [showKeyModal, setShowKeyModal] = useState(false);
+  const [isReverifying, setIsReverifying] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatPrintRef = useRef<HTMLDivElement>(null);
@@ -162,6 +185,7 @@ export default function ChatArea({
       Forms: isAr ? 'اطلب نموذجاً قانونياً محدداً...' : 'Request a legal form...',
       Translation: isAr ? 'اكتب النص المراد ترجمته...' : 'Text to translate...',
       Summarization: isAr ? 'ارفع ملف الحكم القضائي لتلخيصه...' : 'Upload judicial ruling to summarize...',
+      Redrafting: isAr ? 'أدخل أو ارفق النص/المستند المطلوب إعادة صياغته وتحديث أسلوبه...' : 'Enter or attach document/text to rephrase or reformulate...',
       General: isAr ? 'اطرح سؤالاً قانونياً...' : 'Ask a legal question...'
     },
     generating: isAr ? 'جاري التحليل القانوني...' : 'Legal analysis in progress...',
@@ -224,6 +248,41 @@ export default function ChatArea({
         </div>
         
         <div className="flex items-center gap-2 sm:gap-3 no-print">
+          {/* API Key Status Indicator Badge */}
+          <button
+            onClick={() => setShowKeyModal(true)}
+            className={cn(
+              "px-2.5 py-1.5 border transition-all theme-radius font-bold text-[10px] sm:text-[11px] flex items-center gap-1.5 shadow-sm",
+              apiKeyStatus?.status === 'valid' && (theme === 'dark' ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20" : "bg-emerald-600/10 border-emerald-600/30 text-emerald-700 hover:bg-emerald-600/20"),
+              apiKeyStatus?.status === 'quota_exceeded' && (theme === 'dark' ? "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20" : "bg-amber-600/10 border-amber-600/30 text-amber-700 hover:bg-amber-600/20"),
+              (apiKeyStatus?.status === 'invalid_key' || apiKeyStatus?.status === 'error') && (theme === 'dark' ? "bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20" : "bg-rose-600/10 border-rose-600/30 text-rose-700 hover:bg-rose-600/20"),
+              apiKeyStatus?.status === 'checking' && "bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20"
+            )}
+            title={isAr ? "حالة مفتاح API" : "API Key Status"}
+          >
+            {apiKeyStatus?.status === 'checking' ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span className="hidden sm:inline">{isAr ? 'جاري الفحص...' : 'Checking...'}</span>
+              </>
+            ) : apiKeyStatus?.status === 'valid' ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="hidden sm:inline">{isAr ? 'المفتاح: صالح' : 'API Key: Valid'}</span>
+              </>
+            ) : apiKeyStatus?.status === 'quota_exceeded' ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                <span className="hidden sm:inline">{isAr ? 'تجاوز الحصة' : 'Quota Limit'}</span>
+              </>
+            ) : (
+              <>
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                <span className="hidden sm:inline">{isAr ? 'مفتاح غير صالح' : 'Key Invalid'}</span>
+              </>
+            )}
+          </button>
+
           <button 
             onClick={toggleLanguage}
             className={cn(
@@ -267,9 +326,29 @@ export default function ChatArea({
                   <span className="text-[10px] sm:text-[11px] caps text-gold-start/60">{isAr ? 'قاعدة البيانات القانونية' : 'Legal Database'}</span>
                   <span className="text-xs md:text-sm font-medium">{isAr ? 'تمت مزامنة القاعدة السيادية' : 'Sovereign Base Synced'}</span>
                 </div>
-                <div className="p-3 sm:p-5 bg-bg-sidebar/30 border border-border-subtle/30 theme-radius flex flex-col gap-1 hidden md:flex">
-                  <span className="text-[10px] sm:text-[11px] caps text-gold-start/60">{isAr ? 'مجمع المعالجة' : 'Processing Pool'}</span>
-                  <span className="text-xs md:text-sm font-medium">{isAr ? '99.9% معدل النزاهة' : '99.9% Integrity Rate'}</span>
+                <div 
+                  onClick={() => setShowKeyModal(true)}
+                  className="p-3 sm:p-5 bg-bg-sidebar/30 border border-border-subtle/30 hover:border-gold-start/40 theme-radius flex flex-col gap-1 cursor-pointer transition-all group"
+                  title={isAr ? 'اضغط لعرض تفاصيل المفتاح' : 'Click for API Key details'}
+                >
+                  <span className="text-[10px] sm:text-[11px] caps text-gold-start/60 group-hover:text-gold-start flex items-center justify-between">
+                    <span>{isAr ? 'محرك Gemini AI' : 'Gemini API Engine'}</span>
+                    <KeyRound className="w-3 h-3 opacity-60" />
+                  </span>
+                  <div className="flex items-center gap-1.5 md:gap-2">
+                    <div className={cn(
+                      "w-1.5 md:w-2 h-1.5 md:h-2 rounded-full animate-pulse",
+                      apiKeyStatus?.status === 'valid' ? "bg-emerald-500" :
+                      apiKeyStatus?.status === 'quota_exceeded' ? "bg-amber-500" :
+                      apiKeyStatus?.status === 'checking' ? "bg-blue-500" : "bg-rose-500"
+                    )} />
+                    <span className="text-xs md:text-sm font-medium">
+                      {apiKeyStatus?.status === 'valid' ? (isAr ? 'المفتاح صالح ومتصل' : 'Key Valid & Ready') :
+                       apiKeyStatus?.status === 'quota_exceeded' ? (isAr ? 'تم تجاوز الحصة (429)' : 'Quota Rate Limited') :
+                       apiKeyStatus?.status === 'checking' ? (isAr ? 'جاري الفحص...' : 'Checking Status...') :
+                       (isAr ? 'مفتاح غير صالح' : 'Invalid / Missing Key')}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -302,16 +381,16 @@ export default function ChatArea({
                     {isAr ? 'أنت الآن تعمل بصفتك:' : 'Now you are acting as:'}
                   </h3>
                   
-                  {/* Added description of active persona */}
+                  {/* Persona Capability Description */}
                   {RESEARCHER_ROLES.find(r => r.id === activePersona) && (
-                    <motion.p 
+                    <motion.div 
                       key={activePersona}
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 0.6, y: 0 }}
-                      className="text-[10px] md:text-xs text-center max-w-xl text-text-muted italic px-4"
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="text-[10px] md:text-sm text-center max-w-2xl text-gold-start/80 italic px-6 py-3 bg-gold-start/5 border border-gold-start/10 rounded-xl"
                     >
                       {isAr ? RESEARCHER_ROLES.find(r => r.id === activePersona)?.descriptionAr : RESEARCHER_ROLES.find(r => r.id === activePersona)?.description}
-                    </motion.p>
+                    </motion.div>
                   )}
                 </div>
 
@@ -476,9 +555,20 @@ export default function ChatArea({
                                 onTranslateMessage(message.content, isAr ? 'en' : 'ar');
                               }}
                               className="p-2 hover:text-gold-start text-text-muted transition-all hover:bg-gold-start/10 rounded-lg group/tool"
-                              title="Translate"
+                              title={isAr ? "ترجمة" : "Translate"}
                             >
                               <Languages className="w-4 h-4 group-hover/tool:scale-110" />
+                            </button>
+
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onRephraseMessage) onRephraseMessage(message.content);
+                              }}
+                              className="p-2 hover:text-gold-start text-text-muted transition-all hover:bg-gold-start/10 rounded-lg group/tool"
+                              title={isAr ? "إعادة صياغة" : "Rephrase"}
+                            >
+                              <Repeat className="w-4 h-4 group-hover/tool:rotate-180 transition-transform duration-300" />
                             </button>
                             
                             <button 
@@ -487,7 +577,7 @@ export default function ChatArea({
                                 onSaveToLibrary(message.content);
                               }}
                               className="p-2 hover:text-gold-start text-text-muted transition-all hover:bg-gold-start/10 rounded-lg group/tool"
-                              title="Save"
+                              title={isAr ? "حفظ" : "Save"}
                             >
                               <Library className="w-4 h-4 group-hover/tool:scale-110" />
                             </button>
@@ -626,6 +716,40 @@ export default function ChatArea({
             </div>
           )}
 
+          {/* Rephrase Style Selector */}
+          {currentWorkflow === 'Redrafting' && (
+            <div className={cn(
+              "absolute -top-16 inset-x-0 flex bg-bg-deep/90 backdrop-blur-md border border-gold-start/40 p-1.5 z-30 transition-all overflow-x-auto no-scrollbar gap-1.5 theme-radius flex-nowrap shadow-xl",
+              "flex-row items-center"
+            )}>
+              <div className="flex items-center gap-1.5 px-2 text-gold-start font-bold text-[10px] caps shrink-0">
+                <Repeat className="w-3.5 h-3.5 animate-spin-slow" />
+                <span>{isAr ? 'أسلوب الصياغة:' : 'Rephrase Style:'}</span>
+              </div>
+              {REPHRASE_STYLES.map(style => (
+                <button
+                  key={style.id}
+                  type="button"
+                  onClick={() => onRephraseStyleChange?.(style.id)}
+                  title={isAr ? style.descriptionAr : style.description}
+                  className={cn(
+                    "px-3 py-1.5 text-[10px] font-bold transition-all caps whitespace-nowrap shrink-0 theme-radius relative flex items-center gap-1",
+                    rephraseStyle === style.id ? "text-bg-deep font-black shadow-md" : "text-text-muted hover:text-text-main hover:bg-bg-sidebar/40 border border-transparent hover:border-border-subtle/50"
+                  )}
+                >
+                  {rephraseStyle === style.id && (
+                    <motion.div 
+                      layoutId="rephrase-style-active"
+                      className="absolute inset-0 bg-gold-start theme-radius"
+                      transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                  <span className="relative z-10">{isAr ? style.labelAr : style.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="relative flex-1">
             {/* File Previews */}
             {attachments.length > 0 && (
@@ -720,11 +844,139 @@ export default function ChatArea({
             </div>
           </div>
         </form>
-        <div className="max-w-[1500px] mx-auto flex justify-between items-center text-[10px] text-text-muted/40 font-bold uppercase tracking-[0.4em] opacity-60 px-2">
+        <div className="max-w-[1500px] w-full mx-auto flex flex-col md:flex-row justify-between items-center text-[10px] text-text-muted/40 font-bold uppercase tracking-[0.4em] opacity-60 px-2 gap-2 mt-1">
           <span>{translations.ministerial}</span>
+          
+          {/* Performance Mode Switcher */}
+          <div className="flex items-center gap-1.5 bg-bg-sidebar/40 p-0.5 border border-border-subtle rounded-full no-print">
+            <button 
+              type="button"
+              onClick={() => onResponseModeChange('latency')}
+              className={cn(
+                "px-2.5 py-1 rounded-full text-[9px] font-extrabold tracking-wider transition-all flex items-center gap-1",
+                responseMode === 'latency'
+                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/30"
+                  : "text-text-muted/50 hover:text-text-main border border-transparent"
+              )}
+            >
+              <Zap className="w-2.5 h-2.5" />
+              {isAr ? "استجابة سريعة" : "Low Latency"}
+            </button>
+            <button 
+              type="button"
+              onClick={() => onResponseModeChange('thinking')}
+              className={cn(
+                "px-2.5 py-1 rounded-full text-[9px] font-extrabold tracking-wider transition-all flex items-center gap-1",
+                responseMode === 'thinking'
+                  ? "bg-gold-start/10 text-gold-start border border-gold-start/30"
+                  : "text-text-muted/50 hover:text-text-main border border-transparent"
+              )}
+            >
+              <Brain className="w-2.5 h-2.5" />
+              {isAr ? "تفكير عميق" : "High Thinking"}
+            </button>
+          </div>
+
           <span className="text-emerald-500/50">Verified</span>
         </div>
       </footer>
+
+      {/* API Key Status Details Modal */}
+      {showKeyModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-bg-sidebar border border-border-subtle rounded-xl max-w-md w-full p-6 shadow-2xl space-y-5 relative">
+            <button 
+              onClick={() => setShowKeyModal(false)}
+              className="absolute top-4 right-4 text-text-muted hover:text-text-main p-1 rounded-lg"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "p-3 rounded-xl border shrink-0",
+                apiKeyStatus?.status === 'valid' ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" :
+                apiKeyStatus?.status === 'quota_exceeded' ? "bg-amber-500/10 border-amber-500/30 text-amber-400" :
+                apiKeyStatus?.status === 'checking' ? "bg-blue-500/10 border-blue-500/30 text-blue-400" :
+                "bg-rose-500/10 border-rose-500/30 text-rose-400"
+              )}>
+                <KeyRound className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-text-main">
+                  {isAr ? 'حالة مفتاح Gemini API' : 'Gemini API Key Status'}
+                </h3>
+                <p className="text-xs text-text-muted">
+                  {isAr ? 'فحص تلقائي مباشر لاستجابة وصلاحية المفتاح' : 'Real-time ping verification'}
+                </p>
+              </div>
+            </div>
+
+            <div className={cn(
+              "p-4 rounded-lg border text-xs leading-relaxed space-y-2",
+              apiKeyStatus?.status === 'valid' ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-300" :
+              apiKeyStatus?.status === 'quota_exceeded' ? "bg-amber-500/5 border-amber-500/20 text-amber-300" :
+              apiKeyStatus?.status === 'checking' ? "bg-blue-500/5 border-blue-500/20 text-blue-300" :
+              "bg-rose-500/5 border-rose-500/20 text-rose-300"
+            )}>
+              <div className="flex items-center justify-between font-bold text-sm">
+                <span>
+                  {apiKeyStatus?.status === 'valid' ? (isAr ? '✅ المفتاح صالح ومستجيب' : '✅ API Key Valid & Functional') :
+                   apiKeyStatus?.status === 'quota_exceeded' ? (isAr ? '⚠️ تجاوز حد الحصة (429 Quota)' : '⚠️ API Key Quota Exceeded (429)') :
+                   apiKeyStatus?.status === 'checking' ? (isAr ? '🔄 جاري الفحص...' : '🔄 Verifying Key...') :
+                   (isAr ? '❌ المفتاح غير صالح أو غير موجود' : '❌ API Key Invalid or Missing')}
+                </span>
+              </div>
+              <p className="opacity-90">{apiKeyStatus?.message}</p>
+            </div>
+
+            {apiKeyStatus?.status !== 'valid' && (
+              <div className="bg-bg-deep/50 p-4 rounded-lg border border-border-subtle/50 text-xs space-y-2 text-text-muted">
+                <span className="font-bold text-text-main block">
+                  {isAr ? 'خطوات تحديث وإصلاح المفتاح:' : 'How to resolve / update key:'}
+                </span>
+                <ol className="list-decimal list-inside space-y-1.5 opacity-90 leading-normal">
+                  <li>
+                    {isAr ? 'احصل على مفتاح جديد من ' : 'Generate a key at '}
+                    <a 
+                      href="https://aistudio.google.com/app/apikey" 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="text-gold-start underline inline-flex items-center gap-1 font-semibold hover:text-gold-gradient"
+                    >
+                      Google AI Studio <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </li>
+                  <li>{isAr ? 'افتح لوحة Settings > Secrets في AI Studio (أسفل اليسار).' : 'Open Settings > Secrets in AI Studio (bottom-left).'}</li>
+                  <li>{isAr ? 'أضف/حدّث المفتاح تحت اسم GEMINI_API_KEY.' : 'Set or update GEMINI_API_KEY.'}</li>
+                </ol>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-2">
+              <button
+                onClick={async () => {
+                  setIsReverifying(true);
+                  if (onReverifyKey) await onReverifyKey();
+                  setIsReverifying(false);
+                }}
+                disabled={isReverifying}
+                className="px-4 py-2 bg-gold-start/10 hover:bg-gold-start/20 border border-gold-start/30 text-gold-start text-xs font-bold rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                <RefreshCw className={cn("w-3.5 h-3.5", isReverifying && "animate-spin")} />
+                {isAr ? 'إعادة الفحص الآن' : 'Re-verify Now'}
+              </button>
+
+              <button
+                onClick={() => setShowKeyModal(false)}
+                className="px-4 py-2 bg-bg-deep hover:bg-border-subtle/30 text-text-main text-xs font-bold rounded-lg border border-border-subtle transition-all"
+              >
+                {isAr ? 'إغلاق' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

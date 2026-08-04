@@ -154,7 +154,20 @@ export default function LibraryPanel({ language }: LibraryPanelProps) {
       fetchItems(); // Refresh logs
     } catch (err) {
       console.error('Detection failed:', err);
-      alert(isAr ? 'فشل تحليل الرابط. يرجى التأكد من صحة الرابط.' : 'URL analysis failed. Please verify the link.');
+      const isQuotaError = err instanceof Error && (
+        err.message.includes("Quota") || 
+        err.message.includes("quota") || 
+        err.message.includes("API_KEY") || 
+        err.message.includes("429")
+      );
+      if (isQuotaError) {
+        alert(isAr 
+          ? 'تم تجاوز حصة واجهة برمجة تطبيقات Gemini (Quota Exceeded). يرجى إعداد مفتاح API الخاص بك في قسم الإعدادات (Settings > Secrets) لحل هذه المشكلة.' 
+          : 'Gemini API Quota Exceeded. Please configure your own GEMINI_API_KEY under the Settings > Secrets menu in AI Studio.'
+        );
+      } else {
+        alert(isAr ? 'فشل تحليل الرابط. يرجى التأكد من صحة الرابط.' : 'URL analysis failed. Please verify the link.');
+      }
     } finally {
       setIsDetecting(false);
     }

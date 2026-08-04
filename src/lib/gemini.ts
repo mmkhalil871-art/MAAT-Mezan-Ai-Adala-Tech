@@ -23,6 +23,11 @@ CORE CAPABILITIES & WORKFLOWS:
     - Subject (الموضوع): The core legal issue or dispute.
     - Facts (الوقائع): The procedural history and chronological events of the case.
     - Conclusion/Result (النتيجة): The final ruling, verdict, and legal reasoning (ratio decidendi) behind it.
+9. Redrafting & Rephrasing (إعادة الصياغة والتنقيح):
+    - Thoroughly rephrase, restructure, refine, and reformulate the provided text or attached documents (PDFs, Word .docx, images, text files).
+    - Elevate linguistic precision, clarity, legal authority, and tone according to the requested style (Legislative, Simplified Legal, Executive Brief, Diplomatic/Policy, or Court Pleading).
+    - Preserve 100% of the original legal intent, rights, obligations, and statutory references.
+    - Provide a complete, polished, and beautifully formatted rephrased version followed by a concise summary of key legal/linguistic improvements made.
 
 LANGUAGE POLICY:
 - You must respond ONLY in the language requested by the system (Arabic or English). 
@@ -111,7 +116,9 @@ export async function streamLegalResponse(
   language: 'en' | 'ar' = 'en',
   persona: string = 'LegalResearcher',
   files?: File[],
-  onChunk?: (chunk: string) => void
+  onChunk?: (chunk: string) => void,
+  responseMode: 'latency' | 'thinking' = 'thinking',
+  rephraseStyle?: string
 ) {
   const fileParts = files ? await Promise.all(files.map(f => getFilePart(f))) : [];
   
@@ -134,7 +141,7 @@ export async function streamLegalResponse(
   ];
 
   const langFull = language === 'ar' ? 'Arabic' : 'English';
-  const contextPrompt = `CURRENT WORKFLOW: ${workflow}${formType ? `\nTARGET FORM TYPE: ${formType}` : ''}\nCURRENT LANGUAGE: ${langFull}. Respond strictly in ${langFull}.\nCURRENT PERSONA PERSPECTIVE: ${persona}
+  const contextPrompt = `CURRENT WORKFLOW: ${workflow}${formType ? `\nTARGET FORM TYPE: ${formType}` : ''}${rephraseStyle ? `\nREPHRASING STYLE TONE: ${rephraseStyle}` : ''}\nCURRENT LANGUAGE: ${langFull}. Respond strictly in ${langFull}.\nCURRENT PERSONA PERSPECTIVE: ${persona}
   
   PERSPECTIVE GUIDELINES:
   - LegalResearcher: Analyze from a constitutional and legislative hierarchy point of view. Focus on legal texts and case law.
@@ -161,7 +168,7 @@ export async function streamLegalResponse(
       contents,
       systemInstruction: finalInstruction,
       enableSearch: true, // Use Google Search data
-      highThinking: true, // Enable high thinking
+      highThinking: responseMode === 'thinking', // Enable high thinking based on user interface selection
     }),
   });
 
@@ -184,6 +191,38 @@ export async function streamLegalResponse(
   }
 
   return fullText;
+}
+
+export interface ApiKeyVerification {
+  ok: boolean;
+  status: 'valid' | 'invalid_key' | 'quota_exceeded' | 'checking' | 'error';
+  message: string;
+}
+
+export async function verifyGeminiApiKey(): Promise<ApiKeyVerification> {
+  try {
+    const res = await fetch('/api/verify-key');
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: 'error',
+        message: `HTTP error ${res.status}`
+      };
+    }
+    const data = await res.json();
+    return {
+      ok: !!data.ok,
+      status: data.status || (data.ok ? 'valid' : 'error'),
+      message: data.message || 'Verification complete'
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      status: 'error',
+      message: `Failed to connect to verification service: ${msg}`
+    };
+  }
 }
 
 /**

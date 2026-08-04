@@ -14,8 +14,8 @@ import MessagesPanel from './components/MessagesPanel';
 import AboutModal from './components/AboutModal';
 import HowToUseModal from './components/HowToUseModal';
 import { Message, LegalWorkflow, Language, FormType, MessageAction, ResearcherRole } from './types';
-import { WORKFLOW_ACTIONS, OUTCOME_ACTIONS } from './constants';
-import { streamLegalResponse } from './lib/gemini';
+import { WORKFLOW_ACTIONS, OUTCOME_ACTIONS, REPHRASE_STYLES } from './constants';
+import { streamLegalResponse, verifyGeminiApiKey, ApiKeyVerification } from './lib/gemini';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, LibraryItem } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -35,6 +35,7 @@ export default function App() {
   const [fontScale, setFontScale] = useState(1);
   const [textColor, setTextColor] = useState<string>('#E6C682');
   const [formType, setFormType] = useState<FormType>('Contract');
+  const [rephraseStyle, setRephraseStyle] = useState<string>('legislative');
   const [showHistory, setShowHistory] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
@@ -43,6 +44,22 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
   const [pendingContent, setPendingContent] = useState<{ content: string; files?: File[] } | null>(null);
   const [hasDismissedWelcome, setHasDismissedWelcome] = useState(false);
+  const [responseMode, setResponseMode] = useState<'latency' | 'thinking'>('thinking');
+  const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyVerification>({
+    ok: false,
+    status: 'checking',
+    message: 'Verifying GEMINI_API_KEY...'
+  });
+
+  const checkApiKey = useCallback(async () => {
+    setApiKeyStatus({ ok: false, status: 'checking', message: 'Verifying GEMINI_API_KEY...' });
+    const result = await verifyGeminiApiKey();
+    setApiKeyStatus(result);
+  }, []);
+
+  useEffect(() => {
+    checkApiKey();
+  }, [checkApiKey]);
 
   // Theme defaults for text color
   const DAY_DEFAULT = '#0A1B3D';
@@ -146,6 +163,9 @@ export default function App() {
       };
       setMessages(prev => [...prev, initialAssistantMessage]);
 
+      const selectedRephraseOption = REPHRASE_STYLES.find(s => s.id === rephraseStyle);
+      const rephrasePrompt = selectedRephraseOption ? selectedRephraseOption.instructionPrompt : undefined;
+
       const aiResponse = await streamLegalResponse(
         newMessages, 
         workflow, 
@@ -158,7 +178,9 @@ export default function App() {
           setMessages(prev => prev.map(m => 
             m.id === assistantId ? { ...m, content: accumulatedResponse } : m
           ));
-        }
+        },
+        responseMode,
+        workflow === 'Redrafting' ? rephrasePrompt : undefined
       );
 
       // Final update with actions and isResult
@@ -287,7 +309,10 @@ export default function App() {
         'Translation', 
         undefined, 
         targetLang, 
-        activePersona
+        activePersona,
+        undefined,
+        undefined,
+        responseMode
       );
       
       const assistantMessage: Message = {
@@ -308,6 +333,14 @@ export default function App() {
       setIsLoading(false);
     }
   }, []);
+
+  const handleRephraseMessage = useCallback(async (contentToRephrase: string) => {
+    setCurrentWorkflow('Redrafting');
+    const prompt = isAr 
+      ? `يرجى إعادة صياغة وتنقيح وتطوير النص/المستند التالي ليعكس أقصى درجات الدقة والسبك القانوني المحكم:\n\n${contentToRephrase}`
+      : `Please rephrase, refine, and reformulate the following legal text/document to elevate its legal precision, structure, and authoritative tone:\n\n${contentToRephrase}`;
+    await processLegalTask(prompt, undefined, 'Redrafting');
+  }, [isAr, processLegalTask]);
 
   const startNewSession = useCallback(() => {
     setMessages([]);
@@ -426,6 +459,7 @@ export default function App() {
                   messages={messages} 
                   onSendMessage={handleSendMessage} 
                   onTranslateMessage={handleTranslateMessage}
+                  onRephraseMessage={handleRephraseMessage}
                   onSaveToLibrary={handleSaveToLibrary}
                   isLoading={isLoading}
                   currentWorkflow={currentWorkflow}
@@ -434,6 +468,8 @@ export default function App() {
                   language={language}
                   formType={formType}
                   onFormTypeChange={setFormType}
+                  rephraseStyle={rephraseStyle}
+                  onRephraseStyleChange={setRephraseStyle}
                   onActionClick={handleActionClick}
                   onDeleteMessage={handleDeleteMessage}
                   userEmail={user?.email}
@@ -441,6 +477,10 @@ export default function App() {
                   onThemeToggle={toggleTheme}
                   onLanguageChange={setLanguage}
                   onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
+                  responseMode={responseMode}
+                  onResponseModeChange={setResponseMode}
+                  apiKeyStatus={apiKeyStatus}
+                  onReverifyKey={checkApiKey}
                 />
               )}
             </motion.div>
@@ -526,7 +566,7 @@ export default function App() {
           onClick={() => setShowVoice(true)}
           className={cn(
             "fixed bottom-8 z-40 w-14 h-14 rounded-full bg-gold-gradient shadow-2xl flex items-center justify-center text-white transition-all",
-            isAr ? "left-2" : "right-24"
+            isAr ? "left-32" : "right-32"
           )}
         >
           <Mic className="w-6 h-6" />
